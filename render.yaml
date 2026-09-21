@@ -1,0 +1,13 @@
+﻿services:
+  - type: web
+    name: atbg-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: ENSEMBLE_CHECKPOINT_A
+        value: ./checkpoints/atbg_latest.pt
+      - key: ENSEMBLE_CHECKPOINT_B
+        value: ./checkpoints/real_atbg_final.pt
+      - key: ENSEMBLE_WEIGHT_A
+        value: "0.60"
