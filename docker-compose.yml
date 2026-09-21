@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: atbg_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: atbg
+      POSTGRES_PASSWORD: atbg_dev_password
+      POSTGRES_DB: atbg
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
+    # Keep Postgres's own memory footprint modest — useful on a 16-32GB laptop
+    # that is also running Docker + a training job at the same time.
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c work_mem=16MB
+      -c maintenance_work_mem=128MB
+      -c max_connections=50
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atbg"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: atbg_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://atbg:atbg_dev_password@postgres:5432/atbg
+      MODEL_CHECKPOINT_PATH: /app/checkpoints/atbg_latest.pt
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./checkpoints:/app/checkpoints:ro
+      - ./atbg_model:/app/atbg_model:ro
+
+volumes:
+  pgdata:

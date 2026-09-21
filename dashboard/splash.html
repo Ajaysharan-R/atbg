@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATBG — Adaptive Temporal Behaviour Graph</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+:root{--cyan:#38bdf8;--violet:#818cf8;--amber:#f59e0b;--red:#ef4444;--safe:#22c55e;--text:#e2e8f0;--text2:#94a3b8;--text3:#475569;--font:'Space Grotesk',system-ui,sans-serif;--mono:'JetBrains Mono',monospace;}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{background:#070910;color:var(--text);font-family:var(--font);overflow-x:hidden;cursor:none;}
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-thumb{background:rgba(56,189,248,.3);border-radius:2px;}
+#cdot{width:6px;height:6px;background:var(--cyan);border-radius:50%;position:fixed;z-index:9999;pointer-events:none;transform:translate(-50%,-50%);mix-blend-mode:screen;}
+#cring{width:28px;height:28px;border:1px solid rgba(56,189,248,.5);border-radius:50%;position:fixed;z-index:9998;pointer-events:none;transform:translate(-50%,-50%);transition:all .12s cubic-bezier(.4,0,.2,1);mix-blend-mode:screen;}
+#pl{position:fixed;inset:0;z-index:9000;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:32px;}
+.pl-logo{font-size:11px;font-family:var(--mono);font-weight:700;letter-spacing:.3em;color:var(--cyan);}
+.pl-title{font-size:30px;font-weight:700;letter-spacing:.1em;}
+.pl-sub{font-size:11px;font-family:var(--mono);letter-spacing:.15em;color:var(--text3);}
+.pl-checks{display:flex;flex-direction:column;gap:8px;}
+.pl-row{font-size:11px;font-family:var(--mono);color:var(--text3);display:flex;gap:12px;}
+.pl-status{color:var(--safe);opacity:0;transition:opacity .3s;}
+.pl-status.on{opacity:1;}
+.pl-prog-bar{width:220px;height:2px;background:rgba(255,255,255,.08);border-radius:1px;overflow:hidden;margin-top:4px;}
+.pl-prog-fill{height:100%;background:var(--cyan);width:0;transition:width .2s;}
+.pl-prog-pct{font-size:11px;font-family:var(--mono);color:var(--cyan);text-align:center;}
+.pl-online{font-size:13px;font-family:var(--mono);letter-spacing:.2em;color:var(--safe);opacity:0;transition:opacity .5s;margin-top:8px;}
+.pl-online.on{opacity:1;}
+#pl.exit{animation:pl-exit .7s ease forwards;}
+@keyframes pl-exit{to{opacity:0;transform:scale(1.02);pointer-events:none}}
+#seq-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;display:block;}
+#bg-overlay{position:fixed;inset:0;z-index:1;pointer-events:none;background:rgba(7,9,16,0);transition:background .3s;}
+.scan-line{position:fixed;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(56,189,248,.12),transparent);animation:scan 5s linear infinite;z-index:9;pointer-events:none;}
+@keyframes scan{0%{top:0}100%{top:100vh}}
+nav{position:fixed;top:0;left:0;right:0;z-index:200;padding:18px 48px;display:flex;align-items:center;border-bottom:1px solid transparent;transition:all .4s;}
+nav.scrolled{background:rgba(7,9,16,.88);backdrop-filter:blur(16px);border-bottom-color:rgba(255,255,255,.06);padding:12px 48px;}
+.nav-logo{font-size:17px;font-weight:700;letter-spacing:.12em;}
+.nav-links{display:flex;gap:28px;margin:0 auto;}
+.nav-link{font-size:10px;font-family:var(--mono);letter-spacing:.12em;color:var(--text3);cursor:none;text-decoration:none;transition:color .2s;position:relative;}
+.nav-link::after{content:"";position:absolute;bottom:-2px;left:0;width:0;height:1px;background:var(--cyan);transition:width .3s;}
+.nav-link:hover{color:var(--cyan);}
+.nav-link:hover::after{width:100%;}
+.nav-cta{background:transparent;border:1px solid rgba(56,189,248,.4);border-radius:6px;padding:7px 16px;color:var(--cyan);font-size:10px;font-family:var(--mono);letter-spacing:.1em;cursor:none;transition:all .3s;text-decoration:none;}
+.nav-cta:hover{background:rgba(56,189,248,.1);}
+#hud{position:fixed;inset:0;z-index:10;pointer-events:none;padding:80px 36px 28px;display:flex;flex-direction:column;justify-content:space-between;}
+.hud-top{display:flex;justify-content:space-between;align-items:flex-start;}
+.hud-block{opacity:0;transition:opacity .6s;}
+.hud-block.vis{opacity:1;}
+.hud-logo{font-size:11px;font-family:var(--mono);font-weight:700;letter-spacing:.3em;color:var(--cyan);}
+.hud-tagline{font-size:10px;font-family:var(--mono);letter-spacing:.12em;color:rgba(148,163,184,.6);margin-top:3px;}
+.hud-status-label{font-size:9px;font-family:var(--mono);letter-spacing:.2em;color:var(--text3);}
+.hud-status-val{font-size:12px;font-family:var(--mono);font-weight:600;color:var(--cyan);margin-top:2px;transition:color .4s;text-align:right;}
+.hud-status-val.warn{color:var(--amber);}
+.hud-status-val.crit{color:var(--red);}
+.hud-bottom{display:flex;justify-content:space-between;align-items:flex-end;}
+#risk-indicator{opacity:0;transition:opacity .5s;}
+#risk-indicator.vis{opacity:1;}
+.ri-label{font-size:9px;font-family:var(--mono);letter-spacing:.18em;color:var(--text3);}
+.ri-val{font-size:52px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--safe);transition:color .4s;}
+.ri-val.warn{color:var(--amber);}
+.ri-val.danger{color:var(--red);animation:rpulse 1s infinite;}
+@keyframes rpulse{0%,100%{opacity:1}50%{opacity:.7}}
+.ri-level{font-size:10px;font-family:var(--mono);letter-spacing:.18em;color:var(--text3);margin-top:2px;transition:color .4s;}
+.ri-level.danger{color:var(--red);}
+#traj-chain{display:flex;flex-direction:column;align-items:flex-end;gap:4px;opacity:0;transition:opacity .5s;}
+#traj-chain.vis{opacity:1;}
+.tc-s{font-size:10px;font-family:var(--mono);letter-spacing:.1em;opacity:.2;transition:all .4s;display:flex;align-items:center;gap:6px;}
+.tc-s.active{opacity:1;color:var(--cyan);}
+.tc-s.past{opacity:.45;color:var(--text2);}
+.tc-s.esc.active{color:var(--red);}
+.tc-s.esc.past{color:rgba(239,68,68,.4);}
+.tc-b{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0;}
+#progress-sidebar{position:fixed;right:24px;top:50%;transform:translateY(-50%);z-index:11;display:flex;flex-direction:column;align-items:center;gap:0;opacity:0;transition:opacity .6s .4s;pointer-events:none;}
+#progress-sidebar.vis{opacity:1;}
+.pd{width:7px;height:7px;border-radius:50%;border:1px solid rgba(56,189,248,.3);background:transparent;transition:all .4s;margin:3px 0;}
+.pd.active{background:var(--cyan);border-color:var(--cyan);box-shadow:0 0 8px var(--cyan);}
+.pl2{font-size:8px;font-family:var(--mono);letter-spacing:.1em;color:var(--text3);transition:color .3s;text-align:center;margin:2px 0;}
+.pl2.active{color:var(--cyan);}
+.pline{width:1px;height:22px;background:rgba(56,189,248,.15);}
+.pline.active{background:var(--cyan);box-shadow:0 0 6px var(--cyan);}
+#ensemble-hud{position:fixed;left:36px;top:50%;transform:translateY(-50%);z-index:11;opacity:0;transition:opacity .5s;pointer-events:none;background:rgba(7,9,16,.75);backdrop-filter:blur(10px);border:1px solid rgba(56,189,248,.15);border-radius:10px;padding:14px 18px;min-width:170px;}
+#ensemble-hud.vis{opacity:1;}
+.eh-title{font-size:9px;font-family:var(--mono);letter-spacing:.18em;color:var(--text3);margin-bottom:9px;}
+.eh-row{display:flex;align-items:center;gap:7px;margin-bottom:5px;}
+.eh-bar-track{flex:1;height:4px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;}
+.eh-bar-fill{height:100%;border-radius:2px;}
+.eh-label{font-size:9px;font-family:var(--mono);color:var(--text2);width:48px;}
+.eh-pct{font-size:9px;font-family:var(--mono);color:var(--text3);width:26px;text-align:right;}
+.eh-fusion{font-size:9px;font-family:var(--mono);color:var(--cyan);text-align:center;margin-top:7px;border-top:1px solid rgba(56,189,248,.15);padding-top:7px;}
+#scroll-content{position:relative;z-index:20;}
+#hero-section{height:100vh;display:flex;align-items:flex-end;justify-content:center;padding-bottom:48px;}
+.scroll-hint{display:flex;flex-direction:column;align-items:center;gap:8px;}
+.scroll-line{width:1px;height:50px;background:linear-gradient(to bottom,rgba(56,189,248,.4),transparent);animation:spulse 2s infinite;}
+@keyframes spulse{0%,100%{opacity:.3}50%{opacity:1}}
+.scroll-label{font-size:10px;font-family:var(--mono);letter-spacing:.2em;color:var(--text3);}
+.story-section{min-height:100vh;display:flex;align-items:center;padding:80px 48px;position:relative;}
+.story-inner{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center;background:rgba(7,9,16,.72);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:44px;opacity:0;transform:translateY(40px);transition:opacity .8s,transform .8s;}
+.story-inner.vis{opacity:1;transform:translateY(0);}
+.story-inner.rev{direction:rtl;}
+.story-inner.rev>*{direction:ltr;}
+.story-label{font-size:10px;font-family:var(--mono);letter-spacing:.2em;color:var(--cyan);margin-bottom:14px;}
+.story-h{font-size:clamp(28px,4vw,46px);font-weight:700;line-height:1.1;margin-bottom:16px;}
+.story-p{font-size:15px;color:var(--text2);line-height:1.7;}
+.story-vis{background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:24px;min-height:250px;display:flex;align-items:center;justify-content:center;}
+.conv-demo{width:100%;display:flex;flex-direction:column;gap:10px;}
+.conv-msg{opacity:0;transition:all .4s;}
+.conv-msg.show{opacity:1;}
+.conv-mi{padding:10px 14px;border-radius:10px;max-width:86%;font-size:13px;line-height:1.5;}
+.conv-msg.att .conv-mi{background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.14);border-left:2px solid rgba(239,68,68,.4);margin-right:auto;}
+.conv-msg.vic .conv-mi{background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.11);border-right:2px solid rgba(56,189,248,.3);margin-left:auto;}
+.conv-sp{font-size:9px;font-family:var(--mono);font-weight:700;letter-spacing:.1em;margin-bottom:4px;}
+.conv-msg.att .conv-sp{color:#fca5a5;}
+.conv-msg.vic .conv-sp{color:var(--cyan);}
+.conv-tag{font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:3px;margin-top:5px;display:inline-block;letter-spacing:.08em;font-weight:700;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.28);color:#fca5a5;}
+.risk-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:9px;}
+.rb-label{font-size:11px;font-family:var(--mono);color:var(--text3);width:28px;}
+.rb-track{flex:1;height:7px;background:rgba(255,255,255,.05);border-radius:3px;overflow:hidden;}
+.rb-fill{height:100%;border-radius:3px;width:0;transition:width 1s cubic-bezier(.4,0,.2,1);}
+.rb-pct{font-size:10px;font-family:var(--mono);color:var(--text2);width:32px;text-align:right;}
+.rb-state{font-size:9px;font-family:var(--mono);color:var(--text3);width:110px;}
+.full-section{min-height:80vh;display:flex;align-items:center;justify-content:center;padding:80px 48px;position:relative;}
+.glass-wrap{background:rgba(7,9,16,.75);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:44px;max-width:1100px;width:100%;opacity:0;transform:translateY(40px);transition:opacity .8s,transform .8s;}
+.glass-wrap.vis{opacity:1;transform:translateY(0);}
+.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.feat-card{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:20px;transition:all .3s;cursor:none;}
+.feat-card:hover{background:rgba(56,189,248,.05);border-color:rgba(56,189,248,.2);transform:translateY(-4px);}
+.fc-icon{font-size:20px;margin-bottom:12px;}
+.fc-title{font-size:13px;font-weight:600;margin-bottom:6px;}
+.fc-body{font-size:12px;color:var(--text2);line-height:1.6;}
+.metrics-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+.metric-box{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:18px;text-align:center;transition:all .3s;}
+.metric-box:hover{border-color:rgba(56,189,248,.2);}
+.mb-val{font-size:30px;font-weight:700;font-family:var(--mono);}
+.mb-name{font-size:9px;font-family:var(--mono);letter-spacing:.12em;color:var(--text3);margin-top:5px;}
+.mb-note{font-size:9px;color:var(--text3);margin-top:3px;}
+#cta-sec{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:80px 48px;position:relative;}
+.cta-wrap{background:rgba(7,9,16,.8);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:56px 72px;max-width:780px;opacity:0;transform:translateY(40px);transition:opacity .8s,transform .8s;}
+.cta-wrap.vis{opacity:1;transform:translateY(0);}
+.cta-h{font-size:clamp(30px,5vw,60px);font-weight:700;line-height:1.05;margin-bottom:18px;}
+.cta-p{font-size:15px;color:var(--text2);max-width:500px;margin:0 auto 36px;line-height:1.6;}
+.cta-btn{display:inline-flex;align-items:center;gap:14px;background:linear-gradient(135deg,rgba(56,189,248,.22),rgba(14,165,233,.08));border:1px solid rgba(56,189,248,.55);border-radius:10px;padding:16px 36px;font-size:13px;font-family:var(--mono);font-weight:700;letter-spacing:.14em;color:var(--cyan);cursor:none;text-decoration:none;transition:all .4s;box-shadow:0 0 40px rgba(56,189,248,.08);}
+.cta-btn:hover{box-shadow:0 0 60px rgba(56,189,248,.22);transform:translateY(-3px);}
+#final{min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:80px 48px;border-top:1px solid rgba(255,255,255,.05);position:relative;}
+.fs-logo{font-size:54px;font-weight:700;letter-spacing:.1em;margin-bottom:6px;}
+.fs-full{font-size:10px;font-family:var(--mono);letter-spacing:.28em;color:var(--text3);margin-bottom:32px;}
+.fs-quote{font-size:clamp(16px,2.5vw,23px);font-style:italic;color:var(--text2);max-width:520px;line-height:1.5;margin:0 auto 36px;}
+.fs-enter{display:inline-flex;align-items:center;gap:10px;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:13px 26px;font-size:11px;font-family:var(--mono);letter-spacing:.14em;color:var(--text2);cursor:none;text-decoration:none;transition:all .3s;}
+.fs-enter:hover{border-color:rgba(56,189,248,.4);color:var(--cyan);}
+</style>
+</head>
+<body>
+<div id="cdot"></div>
+<div id="cring"></div>
+<canvas id="seq-canvas"></canvas>
+<div id="bg-overlay"></div>
+<div class="scan-line"></div>
+<div id="hud">
+  <div class="hud-top">
+    <div class="hud-block" id="hudLogo"><div class="hud-logo">ATBG</div><div class="hud-tagline">ADAPTIVE TEMPORAL BEHAVIOUR GRAPH</div></div>
+    <div class="hud-block" id="hudStatus" style="text-align:right"><div class="hud-status-label">SYSTEM STATUS</div><div class="hud-status-val" id="hudStatusVal">OBSERVING CONVERSATION</div></div>
+  </div>
+  <div class="hud-bottom">
+    <div id="risk-indicator"><div class="ri-label">RISK SCORE</div><div class="ri-val" id="riVal">08%</div><div class="ri-level" id="riLevel">OBSERVING</div></div>
+    <div id="traj-chain">
+      <div class="tc-s" id="tc0"><span>BENIGN</span><div class="tc-b"></div></div>
+      <div class="tc-s esc" id="tc1"><span>RECIPROCITY BAIT</span><div class="tc-b"></div></div>
+      <div class="tc-s esc" id="tc2"><span>AUTHORITY</span><div class="tc-b"></div></div>
+      <div class="tc-s esc" id="tc3"><span>URGENCY</span><div class="tc-b"></div></div>
+      <div class="tc-s esc" id="tc4"><span>PAYMENT REQUEST</span><div class="tc-b"></div></div>
+      <div class="tc-s esc" id="tc5"><span>CREDENTIAL REQUEST</span><div class="tc-b"></div></div>
+    </div>
+  </div>
+</div>
+<div id="progress-sidebar">
+  <div class="pl2 active" id="pl-OBSERVE">OBSERVE</div><div class="pd active" id="pd-0"></div>
+  <div class="pline" id="pline-0"></div>
+  <div class="pd" id="pd-1"></div><div class="pl2" id="pl-ANALYZE">ANALYZE</div>
+  <div class="pline" id="pline-1"></div>
+  <div class="pl2" id="pl-GRAPH">GRAPH</div><div class="pd" id="pd-2"></div>
+  <div class="pline" id="pline-2"></div>
+  <div class="pd" id="pd-3"></div><div class="pl2" id="pl-ESCALATE">ESCALATE</div>
+  <div class="pline" id="pline-3"></div>
+  <div class="pl2" id="pl-CONFIRM">CONFIRM</div><div class="pd" id="pd-4"></div>
+</div>
+<div id="ensemble-hud">
+  <div class="eh-title">MODEL ENSEMBLE</div>
+  <div class="eh-row"><div class="eh-label">MODEL A</div><div class="eh-bar-track"><div class="eh-bar-fill" style="width:60%;background:var(--cyan)"></div></div><div class="eh-pct">60%</div></div>
+  <div class="eh-row"><div class="eh-label">MODEL B</div><div class="eh-bar-track"><div class="eh-bar-fill" style="width:40%;background:var(--violet)"></div></div><div class="eh-pct">40%</div></div>
+  <div class="eh-fusion">SCORE FUSION → FINAL RISK</div>
+</div>
+<div id="pl">
+  <div><div class="pl-logo">ATBG</div><div class="pl-title" style="margin-top:4px">INITIALIZING</div><div class="pl-sub" style="margin-top:4px">BEHAVIOURAL INTELLIGENCE ENGINE</div></div>
+  <div class="pl-checks">
+    <div class="pl-row"><span>TEMPORAL ENGINE</span><span>........</span><span class="pl-status" id="pl1">READY</span></div>
+    <div class="pl-row"><span>BEHAVIOUR GRAPH</span><span>........</span><span class="pl-status" id="pl2">READY</span></div>
+    <div class="pl-row"><span>ENSEMBLE ENGINE</span><span>........</span><span class="pl-status" id="pl3">READY</span></div>
+    <div class="pl-row"><span>THREAT ANALYSIS</span><span>........</span><span class="pl-status" id="pl4">READY</span></div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+    <div style="font-size:10px;font-family:var(--mono);letter-spacing:.2em;color:var(--text3)">FRAME SEQUENCE</div>
+    <div class="pl-prog-bar"><div class="pl-prog-fill" id="plBar"></div></div>
+    <div class="pl-prog-pct" id="plPct">0%</div>
+  </div>
+  <div class="pl-online" id="plOnline">ATBG VISUAL ENGINE ONLINE</div>
+</div>
+<nav id="nav">
+  <div class="nav-logo">ATBG</div>
+  <div class="nav-links">
+    <a class="nav-link" href="#s1">SYSTEM</a>
+    <a class="nav-link" href="#s2">ESCALATION</a>
+    <a class="nav-link" href="#cta-sec">ENTER</a>
+  </div>
+  <a class="nav-cta" href="index.html">[ ENTER CONSOLE ]</a>
+</nav>
+<div id="scroll-content">
+  <section id="hero-section">
+    <div class="scroll-hint">
+      <div class="scroll-line"></div>
+      <div class="scroll-label">SCROLL TO EXPLORE THE THREAT TRAJECTORY</div>
+    </div>
+  </section>
+  <section class="story-section" id="s1">
+    <div class="story-inner" id="si1">
+      <div>
+        <div class="story-label">SECTION 01 — THE CONVERSATION</div>
+        <h2 class="story-h">Attacks don't<br/>start at the end.</h2>
+        <p class="story-p">Every social engineering attack begins as an ordinary conversation. The danger is invisible in the first message — it only becomes clear through the trajectory. ATBG sees the full arc, not just the moment.</p>
+      </div>
+      <div class="story-vis">
+        <div class="conv-demo">
+          <div class="conv-msg att" id="cm1"><div class="conv-sp">CALLER</div><div class="conv-mi">"Congratulations! You have won ₹5 lakh in our lucky draw."</div></div>
+          <div class="conv-msg vic" id="cm2"><div class="conv-sp">VICTIM</div><div class="conv-mi">"I never entered any lucky draw."</div></div>
+          <div class="conv-msg att" id="cm3"><div class="conv-sp">CALLER</div><div class="conv-mi">"Your number was automatically selected from our database."</div></div>
+          <div class="conv-msg vic" id="cm4"><div class="conv-sp">VICTIM</div><div class="conv-mi">"How do I claim it?"</div></div>
+          <div class="conv-msg att" id="cm5"><div class="conv-sp">CALLER</div><div class="conv-mi">"You only need to pay a small 2000 rupee processing fee."<div class="conv-tag">PAYMENT REQUEST</div></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="story-section" id="s2">
+    <div class="story-inner rev" id="si2">
+      <div>
+        <div class="story-label">SECTION 02 — THE ESCALATION</div>
+        <h2 class="story-h">They escalate.<br/>Turn by turn.</h2>
+        <p class="story-p">Each message shifts the behavioural state. ATBG's time-decayed transition operator predicts how the attacker will move next — before it happens.</p>
+      </div>
+      <div class="story-vis">
+        <div style="width:100%">
+          <div class="risk-bar-row"><div class="rb-label">T1</div><div class="rb-track"><div class="rb-fill" id="rb1" style="background:var(--safe)"></div></div><div class="rb-pct">8%</div><div class="rb-state">Greeting</div></div>
+          <div class="risk-bar-row"><div class="rb-label">T2</div><div class="rb-track"><div class="rb-fill" id="rb2" style="background:var(--safe)"></div></div><div class="rb-pct">14%</div><div class="rb-state">Rapport</div></div>
+          <div class="risk-bar-row"><div class="rb-label">T3</div><div class="rb-track"><div class="rb-fill" id="rb3" style="background:var(--amber)"></div></div><div class="rb-pct">31%</div><div class="rb-state">Reciprocity Bait</div></div>
+          <div class="risk-bar-row"><div class="rb-label">T4</div><div class="rb-track"><div class="rb-fill" id="rb4" style="background:var(--amber)"></div></div><div class="rb-pct">47%</div><div class="rb-state">Urgency</div></div>
+          <div class="risk-bar-row"><div class="rb-label">T5</div><div class="rb-track"><div class="rb-fill" id="rb5" style="background:var(--red)"></div></div><div class="rb-pct">71%</div><div class="rb-state">Payment Request</div></div>
+          <div class="risk-bar-row"><div class="rb-label">T6</div><div class="rb-track"><div class="rb-fill" id="rb6" style="background:var(--red)"></div></div><div class="rb-pct">94%</div><div class="rb-state">Credential Request</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <div class="full-section">
+    <div class="glass-wrap" id="featWrap">
+      <div style="text-align:center;margin-bottom:28px"><div style="font-size:10px;font-family:var(--mono);letter-spacing:.2em;color:var(--cyan);margin-bottom:10px">ATBG CAPABILITIES</div><h2 style="font-size:28px;font-weight:700">Built for real-world detection</h2></div>
+      <div class="feat-grid">
+        <div class="feat-card"><div class="fc-icon">⬡</div><div class="fc-title">Behaviour State Modelling</div><div class="fc-body">12 anchored behaviour states. Vector-quantized codes that stay human-interpretable.</div></div>
+        <div class="feat-card"><div class="fc-icon">⏱</div><div class="fc-title">Time-Decayed Transitions</div><div class="fc-body">Each state has its own learned decay rate. Urgency fades fast. Rapport lingers.</div></div>
+        <div class="feat-card"><div class="fc-icon">🔮</div><div class="fc-title">Next-State Prediction</div><div class="fc-body">Predicts the attacker's next move before it happens — proactive, not reactive.</div></div>
+        <div class="feat-card"><div class="fc-icon">🧠</div><div class="fc-title">Ensemble Intelligence</div><div class="fc-body">60% original + 40% real-data model. Score fusion beats either model alone.</div></div>
+        <div class="feat-card"><div class="fc-icon">🔍</div><div class="fc-title">Evidence Explanation</div><div class="fc-body">Every risk score backed by trajectory, detected signals, keyword evidence.</div></div>
+        <div class="feat-card"><div class="fc-icon">⚡</div><div class="fc-title">Real-Time Analysis</div><div class="fc-body">AUPRC 0.889 on 6,966 real-world scam conversations. Seconds per analysis.</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="full-section">
+    <div class="glass-wrap" id="metricsWrap">
+      <div style="text-align:center;margin-bottom:28px"><div style="font-size:10px;font-family:var(--mono);letter-spacing:.2em;color:var(--cyan);margin-bottom:10px">TEST-SET MODEL METRICS</div><h2 style="font-size:28px;font-weight:700">Research-grade performance</h2></div>
+      <div class="metrics-row">
+        <div class="metric-box"><div class="mb-val">0.889</div><div class="mb-name">AUPRC</div><div class="mb-note">Precision-recall</div></div>
+        <div class="metric-box"><div class="mb-val">0.899</div><div class="mb-name">ROC-AUC</div><div class="mb-note">Discrimination</div></div>
+        <div class="metric-box"><div class="mb-val">0.968</div><div class="mb-name">PRECISION</div><div class="mb-note">Low false alarms</div></div>
+        <div class="metric-box"><div class="mb-val">6,966</div><div class="mb-name">CONVERSATIONS</div><div class="mb-note">8 real sources</div></div>
+      </div>
+    </div>
+  </div>
+  <section id="cta-sec">
+    <div class="cta-wrap" id="ctaWrap">
+      <div class="cta-h">See the attack<br/><span style="color:var(--cyan)">before it escalates.</span></div>
+      <p class="cta-p">Trace behavioural transitions. Predict the next stage. Intervene before the attacker reaches the target.</p>
+      <a class="cta-btn" href="index.html">ENTER THE ATBG CONSOLE</a>
+    </div>
+  </section>
+  <section id="final">
+    <div class="fs-logo">ATBG</div>
+    <div class="fs-full">ADAPTIVE TEMPORAL BEHAVIOUR GRAPH</div>
+    <blockquote class="fs-quote">"Social engineering is not a single message. It is a trajectory."</blockquote>
+    <a class="fs-enter" href="index.html">[ ENTER ATBG ]</a>
+  </section>
+</div>
+<script>
+const dot=document.getElementById('cdot'),ring=document.getElementById('cring');
+let mx=0,my=0,rx=0,ry=0;
+document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY;dot.style.left=mx+'px';dot.style.top=my+'px';});
+(function ac(){rx+=(mx-rx)*.14;ry+=(my-ry)*.14;ring.style.left=rx+'px';ring.style.top=ry+'px';requestAnimationFrame(ac);})();
+document.querySelectorAll('a,button,.feat-card').forEach(el=>{el.addEventListener('mouseenter',()=>{ring.style.transform='translate(-50%,-50%) scale(1.8)';ring.style.borderColor='rgba(56,189,248,.9)';});el.addEventListener('mouseleave',()=>{ring.style.transform='translate(-50%,-50%) scale(1)';ring.style.borderColor='rgba(56,189,248,.5)';});});
+const TOTAL=240,SEQ='assets/atbg-sequence/';
+const images=new Array(TOTAL);
+let loaded=0,curF=0,tgtF=0,lastR=-1,ready=false;
+const canvas=document.getElementById('seq-canvas'),ctx=canvas.getContext('2d'),dpr=window.devicePixelRatio||1;
+function rsz(){canvas.width=innerWidth*dpr;canvas.height=innerHeight*dpr;canvas.style.width=innerWidth+'px';canvas.style.height=innerHeight+'px';ctx.scale(dpr,dpr);if(images[Math.round(curF)]?.complete)drawF(Math.round(curF));}
+rsz();window.addEventListener('resize',rsz);
+function drawF(i){const img=images[i];if(!img||!img.complete)return;const vw=innerWidth,vh=innerHeight,iw=img.naturalWidth,ih=img.naturalHeight,sc=Math.max(vw/iw,vh/ih),dw=iw*sc,dh=ih*sc;ctx.clearRect(0,0,vw,vh);ctx.drawImage(img,(vw-dw)/2,(vh-dh)/2,dw,dh);lastR=i;}
+function loadF(i){return new Promise(r=>{const img=new Image();img.src=SEQ+'frame_'+String(i+1).padStart(4,'0')+'.jpg';img.onload=()=>{images[i]=img;loaded++;up();r();};img.onerror=()=>{loaded++;up();r();};});}
+function up(){const p=Math.round(loaded/TOTAL*100);document.getElementById('plBar').style.width=p+'%';document.getElementById('plPct').textContent=p+'%';}
+async function preload(){await loadF(0);drawF(0);for(let i=1;i<TOTAL;i+=20){const pr=[];for(let j=i;j<Math.min(i+20,TOTAL);j++)pr.push(loadF(j));await Promise.all(pr);}}
+const RISK=[8,10,13,14,18,22,27,33,41,49,56,60,63,68,74,78,82,86,88,91,94];
+const STG=[{t:0,l:'OBSERVE',s:'OBSERVING CONVERSATION',tr:0},{t:.2,l:'ANALYZE',s:'BEHAVIOURAL SIGNAL EXTRACTION',tr:1},{t:.4,l:'GRAPH',s:'TEMPORAL GRAPH FORMATION',tr:2},{t:.6,l:'ESCALATE',s:'THREAT ESCALATION — HIGH RISK',tr:4},{t:.8,l:'CONFIRM',s:'THREAT TRAJECTORY DETECTED — CRITICAL',tr:5}];
+(function rl(){const d=tgtF-curF;if(Math.abs(d)>0.3)curF+=d*0.15;else curF=tgtF;const i=Math.round(Math.max(0,Math.min(TOTAL-1,curF)));if(i!==lastR)drawF(i);updateHUD();requestAnimationFrame(rl);})();
+let hudOn=false;
+function updateHUD(){
+  const maxS=document.documentElement.scrollHeight-innerHeight;
+  const prog=maxS>0?Math.max(0,Math.min(1,scrollY/maxS)):0;
+  // HUD shown on boot
+  const si=STG.reduce((a,s,i)=>prog>=s.t?i:a,0),stage=STG[si];
+  const sv=document.getElementById('hudStatusVal');sv.textContent=stage.s;sv.className='hud-status-val'+(prog>.55?' warn':'')+(prog>.75?' crit':'');
+  const ri=Math.min(Math.floor(prog*RISK.length),RISK.length-1),risk=RISK[ri];
+  const rv=document.getElementById('riVal');rv.textContent=risk+'%';rv.className='ri-val'+(risk>35?' warn':'')+(risk>60?' danger':'');
+  const rl2=document.getElementById('riLevel');rl2.textContent=risk<20?'OBSERVING':risk<35?'SUSPICIOUS':risk<60?'HIGH RISK':'CRITICAL';rl2.className='ri-level'+(risk>60?' danger':'');
+  STG.forEach((s,i)=>{const a=si>=i;const dot=document.getElementById('pd-'+i),lbl=document.getElementById('pl-'+s.l),line=document.getElementById('pline-'+i);if(dot)dot.className='pd'+(a?' active':'');if(lbl)lbl.className='pl2'+(a?' active':'');if(line)line.className='pline'+(a?' active':'');});
+  for(let i=0;i<=5;i++){const el=document.getElementById('tc'+i);if(el){let c=el.className.replace(/ active| past/g,'');if(i<stage.tr)c+=' past';else if(i===stage.tr)c+=' active';el.className=c;}}
+  const ens=document.getElementById('ensemble-hud');if(prog>.35&&prog<.72)ens.classList.add('vis');else ens.classList.remove('vis');
+  document.getElementById('bg-overlay').style.background=`rgba(7,9,16,${Math.min(prog*.55,.55)})`;
+}
+window.addEventListener('scroll',()=>{
+  if(!ready)return;
+  const maxS=document.documentElement.scrollHeight-innerHeight;
+  tgtF=Math.max(0,Math.min(1,scrollY/maxS))*(TOTAL-1);
+  document.getElementById('nav').classList.toggle('scrolled',scrollY>60);
+},{passive:true});
+function checkReveal(){document.querySelectorAll('.story-inner,.glass-wrap,.cta-wrap').forEach(el=>{if(el.getBoundingClientRect().top<innerHeight*.88)el.classList.add('vis');});}
+window.addEventListener('scroll',checkReveal,{passive:true});
+let c1=false,c2=false;
+const io=new IntersectionObserver(e=>e.forEach(x=>{if(x.isIntersecting){if(x.target.id==='si1'&&!c1){c1=true;['cm1','cm2','cm3','cm4','cm5'].forEach((id,i)=>setTimeout(()=>document.getElementById(id).classList.add('show'),i*450));}if(x.target.id==='si2'&&!c2){c2=true;[{id:'rb1',p:8},{id:'rb2',p:14},{id:'rb3',p:31},{id:'rb4',p:47},{id:'rb5',p:71},{id:'rb6',p:94}].forEach((b,i)=>setTimeout(()=>document.getElementById(b.id).style.width=b.p+'%',i*200));}}}),{threshold:.2});
+['si1','si2'].forEach(id=>{const el=document.getElementById(id);if(el)io.observe(el);});
+(async function boot(){
+  const D=ms=>new Promise(r=>setTimeout(r,ms));
+  await D(300);
+  for(const id of['pl1','pl2','pl3','pl4']){document.getElementById(id).classList.add('on');await D(280);}
+  // Start preload — show first frame immediately so something is visible
+  preload().catch(()=>{});
+  // Wait until at least 10 frames loaded or 8 seconds max, then show page
+  await new Promise(res=>{
+    const check=setInterval(()=>{if(loaded>=10||loaded>=TOTAL){clearInterval(check);res();}},200);
+    setTimeout(()=>{clearInterval(check);res();},8000);
+  });
+  document.getElementById('plOnline').classList.add('on');
+  await D(700);
+  document.getElementById('pl').classList.add('exit');
+  await D(700);
+  document.getElementById('pl').style.display='none';
+  ready=true;
+  checkReveal();
+  // Show HUD immediately after load
+  ['hudLogo','hudStatus'].forEach(id=>document.getElementById(id).classList.add('vis'));
+  document.getElementById('progress-sidebar').classList.add('vis');
+  document.getElementById('risk-indicator').classList.add('vis');
+  document.getElementById('traj-chain').classList.add('vis');
+})();
+</script>
+</body>
+</html>

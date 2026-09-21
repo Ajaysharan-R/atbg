@@ -1,0 +1,1658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATBG — AI Investigation Console</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --bg: #080a0e;
+  --bg2: #0d1017;
+  --surface: rgba(255,255,255,0.03);
+  --surface-hover: rgba(255,255,255,0.06);
+  --border: rgba(255,255,255,0.07);
+  --border-bright: rgba(56,189,248,0.2);
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --text3: #475569;
+  --cyan: #38bdf8;
+  --cyan-dim: rgba(56,189,248,0.1);
+  --cyan-glow: 0 0 20px rgba(56,189,248,0.15);
+  --safe: #22c55e; --safe-dim: rgba(34,197,94,0.1); --safe-glow: 0 0 16px rgba(34,197,94,0.2);
+  --warn: #f59e0b; --warn-dim: rgba(245,158,11,0.1);
+  --danger: #f97316; --danger-dim: rgba(249,115,22,0.1);
+  --crit: #ef4444; --crit-dim: rgba(239,68,68,0.12); --crit-glow: 0 0 20px rgba(239,68,68,0.2);
+  --font: 'Space Grotesk', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+  --r: 10px;
+}
+
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 13px; line-height: 1.5; min-height: 100vh; overflow-x: hidden; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 4px; }
+
+/* ── Header ── */
+header {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(8,10,14,0.95); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px; height: 56px;
+  display: flex; align-items: center; gap: 16px;
+}
+.logo { display: flex; align-items: center; gap: 10px; }
+.logo-mark { width: 28px; height: 28px; background: linear-gradient(135deg, #0ea5e9, #38bdf8); border-radius: 7px; display: grid; place-items: center; font-size: 13px; flex-shrink: 0; box-shadow: 0 0 12px rgba(56,189,248,0.3); }
+.logo-name { font-size: 15px; font-weight: 700; letter-spacing: 0.05em; color: var(--text); }
+.logo-sub { font-size: 11px; color: var(--text3); font-weight: 400; line-height: 1.2; }
+.header-center { margin: 0 auto; display: flex; align-items: center; gap: 8px; }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--safe); box-shadow: 0 0 8px var(--safe); animation: pulse-dot 2s infinite; }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.5} }
+.status-tag { font-size: 11px; font-family: var(--mono); color: var(--text2); letter-spacing: 0.08em; }
+.header-right { display: flex; align-items: center; gap: 8px; }
+.ensemble-badge { display: flex; flex-direction: column; align-items: flex-end; background: var(--cyan-dim); border: 1px solid var(--border-bright); border-radius: 7px; padding: 4px 10px; }
+.ensemble-badge .tag { font-size: 10px; font-family: var(--mono); font-weight: 600; color: var(--cyan); letter-spacing: 0.1em; }
+.ensemble-badge .val { font-size: 9px; color: var(--text3); font-family: var(--mono); }
+.hdr-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; color: var(--text2); font-size: 11px; padding: 6px 10px; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all .2s; }
+.hdr-btn:hover { border-color: var(--border-bright); color: var(--cyan); }
+#investModeBtn.active { background: var(--cyan-dim); border-color: var(--border-bright); color: var(--cyan); }
+
+/* ── Toast ── */
+#toast { position: fixed; bottom: 24px; right: 24px; z-index: 999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.toast-item { background: rgba(20,24,32,0.95); border: 1px solid var(--border-bright); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--text2); backdrop-filter: blur(8px); animation: slide-in 0.3s ease; max-width: 280px; }
+@keyframes slide-in { from{transform:translateX(20px);opacity:0} to{transform:translateX(0);opacity:1} }
+
+/* ── Main layout ── */
+.workspace {
+  display: grid;
+  grid-template-columns: 380px 1fr 300px;
+  grid-template-rows: auto;
+  gap: 16px;
+  padding: 16px 24px;
+  min-height: calc(100vh - 56px);
+  max-width: 1600px;
+  margin: 0 auto;
+}
+@media (max-width: 1200px) { .workspace { grid-template-columns: 340px 1fr; } .right-col { display: none; } }
+@media (max-width: 800px) { .workspace { grid-template-columns: 1fr; } }
+
+/* ── Panel base ── */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+  transition: border-color .2s;
+}
+.panel:hover { border-color: rgba(255,255,255,0.1); }
+.panel-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+}
+.panel-icon { width: 20px; height: 20px; border-radius: 5px; display: grid; place-items: center; font-size: 10px; flex-shrink: 0; }
+.panel-title { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text2); }
+.panel-body { padding: 14px 16px; }
+
+/* ── Left column ── */
+.left-col { display: flex; flex-direction: column; gap: 12px; }
+
+/* Input mode selector */
+.input-mode-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+.mode-tab { background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--text3); font-size: 11px; padding: 5px 10px; cursor: pointer; font-family: var(--font); transition: all .2s; }
+.mode-tab.active { background: var(--cyan-dim); border-color: var(--border-bright); color: var(--cyan); }
+
+/* Raw textarea */
+#rawInput { display: block; }
+textarea {
+  width: 100%; height: 160px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text); font-family: var(--mono); font-size: 12px;
+  padding: 12px; resize: vertical; outline: none;
+  transition: border-color .2s;
+}
+textarea:focus { border-color: var(--border-bright); }
+textarea::placeholder { color: var(--text3); }
+.input-hint { font-size: 11px; color: var(--text3); margin-top: 6px; font-family: var(--mono); }
+.input-hint code { color: #7dd3fc; }
+
+/* Message builder */
+#msgBuilder { display: none; }
+.msg-list { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.msg-row { display: flex; gap: 6px; align-items: flex-start; }
+.msg-speaker-sel { background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 11px; padding: 5px 8px; cursor: pointer; font-family: var(--mono); min-width: 80px; }
+.msg-text-in { flex: 1; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 12px; padding: 5px 8px; font-family: var(--font); outline: none; }
+.msg-text-in:focus { border-color: var(--border-bright); }
+.msg-del { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 14px; padding: 4px; line-height: 1; }
+.msg-del:hover { color: var(--crit); }
+.add-turn-btn { background: transparent; border: 1px dashed var(--border); border-radius: 6px; color: var(--text3); font-size: 11px; padding: 6px; cursor: pointer; width: 100%; transition: all .2s; font-family: var(--font); }
+.add-turn-btn:hover { border-color: var(--border-bright); color: var(--cyan); }
+
+/* Action row */
+.action-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.btn-primary { background: var(--cyan); color: #050810; border: none; border-radius: 8px; padding: 9px 18px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: var(--font); letter-spacing: 0.04em; transition: all .2s; }
+.btn-primary:hover { opacity: .9; box-shadow: var(--cyan-glow); }
+.btn-primary:disabled { opacity: .4; cursor: default; }
+.btn-ghost { background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-size: 12px; color: var(--text2); cursor: pointer; font-family: var(--font); transition: all .2s; }
+.btn-ghost:hover { border-color: var(--border-bright); color: var(--cyan); }
+.btn-ghost:disabled { opacity: .4; cursor: default; }
+#statusText { font-size: 12px; color: var(--text3); align-self: center; }
+
+/* ── Conversation viewer ── */
+#convViewer { display: none; }
+.conv-msgs { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.msg-bubble {
+  padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--border); cursor: pointer; transition: all .2s;
+  position: relative;
+}
+.msg-bubble:hover { border-color: var(--border-bright); background: var(--surface-hover); }
+.msg-bubble.selected { border-color: var(--cyan); background: var(--cyan-dim); }
+.msg-bubble.attacker { border-left: 3px solid var(--crit); }
+.msg-bubble.victim { border-left: 3px solid var(--cyan); }
+.msg-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.msg-speaker { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-family: var(--mono); }
+.msg-speaker.attacker { color: #fca5a5; }
+.msg-speaker.victim { color: var(--cyan); }
+.msg-speaker.unknown { color: var(--text3); }
+.msg-turn { font-size: 10px; color: var(--text3); font-family: var(--mono); }
+.msg-text { font-size: 12px; color: var(--text); line-height: 1.5; }
+.msg-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.msg-tag { font-size: 9px; font-family: var(--mono); padding: 2px 7px; border-radius: 4px; border: 1px solid; font-weight: 600; letter-spacing: 0.08em; }
+.msg-tag.escalation { background: rgba(239,68,68,.1); border-color: rgba(239,68,68,.3); color: #fca5a5; }
+.msg-tag.neutral { background: var(--surface-hover); border-color: var(--border); color: var(--text3); }
+
+/* ── Session history ── */
+.session-list { display: flex; flex-direction: column; gap: 6px; }
+.session-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(0,0,0,.2); border-radius: 7px; border: 1px solid var(--border); cursor: pointer; transition: all .2s; }
+.session-item:hover { border-color: var(--border-bright); background: var(--surface-hover); }
+.session-name { font-size: 12px; color: var(--text2); }
+.session-risk { font-size: 11px; font-family: var(--mono); font-weight: 600; }
+.session-empty { font-size: 12px; color: var(--text3); text-align: center; padding: 12px 0; }
+
+/* ── Center column ── */
+.center-col { display: flex; flex-direction: column; gap: 12px; }
+
+/* Temporal graph */
+#graphCanvas { width: 100%; height: 200px; }
+.graph-state { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; transition: all .3s; }
+.gs-node { width: 64px; height: 64px; border-radius: 50%; border: 2px solid; display: grid; place-items: center; font-size: 9px; font-weight: 700; font-family: var(--mono); text-align: center; letter-spacing: 0.06em; line-height: 1.2; padding: 4px; transition: all .3s; }
+.gs-node.current { animation: glow-pulse 1.5s infinite; }
+.gs-node.predicted { animation: border-pulse 1.5s infinite; }
+@keyframes glow-pulse { 0%,100%{box-shadow:0 0 10px currentColor} 50%{box-shadow:0 0 25px currentColor} }
+@keyframes border-pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+.gs-label { font-size: 9px; color: var(--text3); font-family: var(--mono); text-transform: uppercase; }
+.graph-container { position: relative; min-height: 200px; }
+#graphSvg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/* State detail popup */
+#stateDetail { display: none; }
+
+/* Risk evolution chart */
+.chart-wrap { position: relative; height: 180px; }
+#riskChart { width: 100%; height: 100%; }
+
+/* ── Right column ── */
+.right-col { display: flex; flex-direction: column; gap: 12px; }
+
+/* Risk gauge */
+.gauge-wrap { display: flex; flex-direction: column; align-items: center; padding: 12px 0 8px; gap: 8px; }
+.gauge-svg { overflow: visible; }
+.risk-num { font-size: 56px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; transition: color .5s; }
+.risk-badge { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; padding: 4px 14px; border-radius: 20px; transition: all .4s; }
+.rb-safe { background: var(--safe-dim); color: var(--safe); }
+.rb-warn { background: var(--warn-dim); color: var(--warn); }
+.rb-danger { background: var(--danger-dim); color: var(--danger); }
+.rb-crit { background: var(--crit-dim); color: var(--crit); box-shadow: var(--crit-glow); }
+
+/* Delta display */
+.risk-delta { display: flex; align-items: center; gap: 12px; font-size: 11px; font-family: var(--mono); margin-top: 4px; }
+.delta-item { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.delta-label { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; }
+.delta-val { font-weight: 600; color: var(--text2); }
+.delta-change.pos { color: var(--crit); }
+.delta-change.neg { color: var(--safe); }
+.delta-div { width: 1px; height: 28px; background: var(--border); }
+
+/* Stats mini grid */
+.mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mini-stat { background: rgba(0,0,0,.2); border-radius: 7px; padding: 10px; border: 1px solid var(--border); }
+.mini-label { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+.mini-val { font-size: 14px; font-weight: 600; font-family: var(--mono); color: var(--text); }
+.mini-val.state-val { font-size: 11px; color: var(--cyan); }
+
+/* Thresholds legend */
+.thr-legend { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
+.thr-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text3); }
+.thr-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+/* ── Investigation Pipeline ── */
+.pipeline { display: flex; align-items: center; padding: 10px 16px; gap: 0; overflow-x: auto; }
+.pipe-step { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; cursor: pointer; padding: 8px 12px; border-radius: 7px; transition: all .2s; min-width: 80px; }
+.pipe-step:hover { background: var(--surface-hover); }
+.pipe-step.active { background: var(--cyan-dim); }
+.pipe-icon { font-size: 14px; }
+.pipe-label { font-size: 9px; font-family: var(--mono); color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; text-align: center; }
+.pipe-val { font-size: 10px; color: var(--text2); font-weight: 600; text-align: center; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pipe-arrow { color: var(--text3); font-size: 12px; flex-shrink: 0; }
+
+/* ── Evidence intelligence ── */
+.evidence-list { display: flex; flex-direction: column; gap: 6px; }
+.evidence-item { background: rgba(0,0,0,.2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: all .2s; }
+.evidence-item:hover { border-color: var(--border-bright); }
+.evidence-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.evidence-icon { font-size: 12px; }
+.evidence-type { font-size: 10px; font-family: var(--mono); font-weight: 700; letter-spacing: 0.08em; color: var(--warn); }
+.evidence-text { font-size: 12px; color: var(--text2); }
+.evidence-empty { font-size: 12px; color: var(--text3); text-align: center; padding: 12px 0; }
+
+/* ── Why flagged / Explanation ── */
+.why-section { margin-bottom: 12px; }
+.why-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text3); margin-bottom: 6px; }
+.why-content { font-size: 12px; color: var(--text2); line-height: 1.6; }
+.why-transition { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; }
+.state-pill { padding: 4px 10px; border-radius: 5px; border: 1px solid; font-size: 11px; font-weight: 600; }
+.state-pill.escalation { border-color: rgba(239,68,68,.4); color: #fca5a5; background: var(--crit-dim); }
+.state-pill.neutral { border-color: var(--border); color: var(--text3); background: var(--surface); }
+
+/* Boost note */
+.boost-note { font-size: 11px; color: var(--warn); margin-top: 8px; padding: 8px 10px; background: var(--warn-dim); border-radius: 6px; border: 1px solid rgba(245,158,11,.2); }
+
+/* ── Model intelligence ── */
+.model-intel { display: flex; flex-direction: column; gap: 10px; }
+.model-bar-row { display: flex; align-items: center; gap: 8px; }
+.model-bar-label { font-size: 11px; color: var(--text2); width: 60px; flex-shrink: 0; font-family: var(--mono); }
+.model-bar-track { flex: 1; height: 6px; background: var(--border); border-radius: 3px; }
+.model-bar-fill { height: 100%; border-radius: 3px; transition: width .8s cubic-bezier(.4,0,.2,1); }
+.model-bar-val { font-size: 11px; color: var(--text3); width: 32px; text-align: right; font-family: var(--mono); }
+.metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px; }
+.metric-cell { background: rgba(0,0,0,.2); border-radius: 6px; padding: 8px 10px; border: 1px solid var(--border); }
+.metric-name { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; }
+.metric-val { font-size: 16px; font-weight: 600; font-family: var(--mono); color: var(--text); }
+.metrics-note { font-size: 10px; color: var(--text3); text-align: center; margin-top: 6px; }
+
+/* ── What-if simulator ── */
+.sim-grid { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.sim-toggle { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: rgba(0,0,0,.2); border-radius: 7px; border: 1px solid var(--border); cursor: pointer; transition: all .2s; }
+.sim-toggle:hover { border-color: var(--border-bright); }
+.sim-toggle input[type="checkbox"] { accent-color: var(--cyan); width: 13px; height: 13px; cursor: pointer; }
+.sim-toggle label { font-size: 12px; color: var(--text2); cursor: pointer; flex: 1; }
+.sim-toggle .boost-tag { font-size: 9px; font-family: var(--mono); color: var(--text3); }
+.sim-result { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; align-items: center; }
+.sim-box { background: rgba(0,0,0,.2); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid var(--border); }
+.sim-box-label { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+.sim-box-val { font-size: 22px; font-weight: 700; font-family: var(--mono); }
+.sim-note { font-size: 10px; color: var(--text3); text-align: center; margin-top: 8px; padding: 6px; background: var(--surface); border-radius: 6px; border: 1px solid var(--border); }
+
+/* ── Intervention panel ── */
+#interventionPanel { display: none; }
+.intervention-alert { background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.25); border-radius: 10px; padding: 16px; }
+.intervention-title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; color: #fca5a5; margin-bottom: 12px; }
+.intervention-actions { list-style: none; display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.intervention-actions li { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text2); }
+.intervention-actions li::before { content: "✕"; color: var(--crit); font-weight: 700; font-size: 10px; }
+.intervention-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-block { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); border-radius: 7px; color: #fca5a5; font-size: 11px; font-weight: 700; padding: 7px 14px; cursor: pointer; font-family: var(--font); letter-spacing: 0.06em; transition: all .2s; }
+.btn-block:hover { background: rgba(239,68,68,0.25); }
+.btn-mark { background: rgba(249,115,22,0.12); border: 1px solid rgba(249,115,22,0.35); border-radius: 7px; color: #fdba74; font-size: 11px; font-weight: 700; padding: 7px 14px; cursor: pointer; font-family: var(--font); letter-spacing: 0.06em; transition: all .2s; }
+.btn-monitor { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; color: var(--text2); font-size: 11px; font-weight: 700; padding: 7px 14px; cursor: pointer; font-family: var(--font); transition: all .2s; }
+
+/* ── Replay mode ── */
+#replayPanel { display: none; }
+.replay-controls { display: flex; align-items: center; gap: 8px; }
+.replay-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; color: var(--text2); font-size: 14px; width: 32px; height: 32px; cursor: pointer; display: grid; place-items: center; transition: all .2s; }
+.replay-btn:hover { border-color: var(--border-bright); color: var(--cyan); }
+.replay-btn.active { background: var(--cyan-dim); border-color: var(--border-bright); color: var(--cyan); }
+.replay-counter { font-size: 11px; font-family: var(--mono); color: var(--text2); margin: 0 4px; }
+.replay-slider { flex: 1; accent-color: var(--cyan); }
+.replay-state-display { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+.rsd-box { background: rgba(0,0,0,.2); border-radius: 7px; padding: 8px; border: 1px solid var(--border); text-align: center; }
+.rsd-label { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; }
+.rsd-val { font-size: 13px; font-weight: 600; font-family: var(--mono); color: var(--text); margin-top: 2px; }
+
+/* ── Comparison mode ── */
+#compareSection { display: none; }
+.compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cmp-panel { background: rgba(0,0,0,.2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.cmp-label { font-size: 10px; font-family: var(--mono); color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+.cmp-risk { font-size: 32px; font-weight: 700; font-family: var(--mono); }
+.cmp-meta { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+/* ── Loading animation ── */
+#loadingOverlay { display: none; position: fixed; inset: 0; background: rgba(8,10,14,0.85); backdrop-filter: blur(4px); z-index: 200; flex-direction: column; align-items: center; justify-content: center; gap: 24px; }
+#loadingOverlay.active { display: flex; }
+.loading-title { font-size: 13px; font-weight: 600; letter-spacing: 0.1em; color: var(--cyan); text-transform: uppercase; }
+.loading-steps { display: flex; flex-direction: column; gap: 8px; }
+.load-step { display: flex; align-items: center; gap: 10px; font-size: 12px; font-family: var(--mono); color: var(--text3); }
+.load-step.done { color: var(--safe); }
+.load-step.active { color: var(--text); }
+.load-icon { width: 14px; text-align: center; }
+
+/* ── Investigation mode ── */
+body.invest-mode .right-col { grid-column: span 2; }
+
+/* Full-page sections for investigation mode */
+.investigate-section { display: none; }
+body.invest-mode .investigate-section { display: block; }
+
+/* ── Artifact tags (bottom) ── */
+.artifact-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.artifact-chip { font-family: var(--mono); font-size: 10px; background: rgba(12,35,64,0.6); border: 1px solid rgba(56,189,248,0.2); color: #7dd3fc; padding: 3px 9px; border-radius: 5px; }
+
+/* Row spanning */
+.full-row { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div id="loadingOverlay">
+  <div class="loading-title">Analyzing Conversation</div>
+  <div class="loading-steps" id="loadSteps">
+    <div class="load-step" id="ls1"><span class="load-icon">○</span> Parsing conversation turns</div>
+    <div class="load-step" id="ls2"><span class="load-icon">○</span> Detecting behavioural signals</div>
+    <div class="load-step" id="ls3"><span class="load-icon">○</span> Updating temporal graph</div>
+    <div class="load-step" id="ls4"><span class="load-icon">○</span> Predicting next state</div>
+    <div class="load-step" id="ls5"><span class="load-icon">○</span> Calculating ensemble risk</div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast"></div>
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <div class="logo-mark">🛡</div>
+    <div>
+      <div class="logo-name">ATBG</div>
+      <div class="logo-sub">Adaptive Temporal Behaviour Graph · Real-time Social Engineering Detection</div>
+    </div>
+  </div>
+  <div class="header-center">
+    <div class="status-dot"></div>
+    <span class="status-tag">API ONLINE</span>
+    <span class="status-tag" style="color:var(--border);margin:0 2px">|</span>
+    <div class="status-dot" style="background:var(--cyan);box-shadow:0 0 8px var(--cyan)"></div>
+    <span class="status-tag">LIVE ANALYSIS</span>
+  </div>
+  <div class="header-right">
+    <div class="ensemble-badge">
+      <div class="tag">ENSEMBLE</div>
+      <div class="val">60% A + 40% B</div>
+    </div>
+    <button class="hdr-btn" onclick="toggleCompare()" title="Compare analyses">⇄ Compare</button>
+    <button class="hdr-btn" id="investModeBtn" onclick="toggleInvestMode()" title="Investigation mode">🔬 Investigate</button>
+    <button class="hdr-btn" onclick="toggleReplay()" id="replayBtn" title="Replay analysis">▶ Replay</button>
+  </div>
+</header>
+
+<!-- Main workspace -->
+<div class="workspace" id="workspace">
+
+  <!-- ── LEFT COLUMN ── -->
+  <div class="left-col">
+
+    <!-- Input panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-icon" style="background:rgba(56,189,248,.1);color:var(--cyan)">📥</div>
+        <div class="panel-title">Conversation Investigation</div>
+      </div>
+      <div class="panel-body">
+        <div class="input-mode-tabs">
+          <button class="mode-tab active" onclick="switchMode('raw')">✏ Raw Text</button>
+          <button class="mode-tab" onclick="switchMode('builder')">🔧 Turn Builder</button>
+          <button class="mode-tab" onclick="switchMode('screenshot')">📷 Screenshot</button>
+        </div>
+
+        <div id="rawInput">
+          <textarea id="convo" placeholder="caller: Congratulations! You have won ₹5 lakh in our lucky draw.
+victim: I never entered any lucky draw.
+caller: Your number was selected automatically.
+caller: You need to pay ₹2,000 processing fee to claim your prize.
+..."></textarea>
+          <div class="input-hint">One turn per line · Format: <code>speaker: message text</code></div>
+        </div>
+
+        <div id="msgBuilder">
+          <div class="msg-list" id="msgList"></div>
+          <button class="add-turn-btn" onclick="addMsgRow()">+ ADD TURN</button>
+        </div>
+
+        <!-- Inline screenshot upload tab -->
+        <div id="screenshotTab" style="display:none">
+          <input type="file" id="screenshotFileInline" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none" onchange="handleInlineFileSelect(event)"/>
+          <div id="inlineUploadZone" onclick="document.getElementById('screenshotFileInline').click()"
+            ondragover="event.preventDefault();this.style.borderColor='rgba(129,140,248,.6)'"
+            ondragleave="this.style.borderColor='rgba(129,140,248,.2)'"
+            ondrop="handleInlineDrop(event)"
+            style="border:2px dashed rgba(129,140,248,.25);border-radius:10px;padding:32px 16px;text-align:center;cursor:pointer;transition:all .3s;background:rgba(129,140,248,.03)">
+            <div style="font-size:28px;margin-bottom:10px">📷</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">Drop screenshot here</div>
+            <div style="font-size:11px;color:var(--text3)">or click to browse · JPG PNG WEBP · max 10MB</div>
+          </div>
+          <div id="inlineOcrProgress" style="display:none;margin-top:12px">
+            <div style="font-size:10px;font-family:var(--mono);letter-spacing:.18em;color:#a78bfa;margin-bottom:8px">PROCESSING IMAGE</div>
+            <div id="inlineOcrSteps" style="display:flex;flex-direction:column;gap:6px"></div>
+          </div>
+          <div id="inlineOcrResult" style="display:none;margin-top:10px">
+            <div style="font-size:10px;font-family:var(--mono);letter-spacing:.12em;color:var(--text3);margin-bottom:5px">EXTRACTED CONVERSATION</div>
+            <textarea id="inlineOcrText" style="width:100%;height:130px;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:10px;resize:vertical;outline:none" onfocus="this.style.borderColor='rgba(129,140,248,.4)'" onblur="this.style.borderColor='rgba(255,255,255,.08)'"></textarea>
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <button onclick="useInlineOcr()" class="btn-primary" style="flex:1;font-size:11px;padding:8px">▶ ANALYZE THIS CONVERSATION</button>
+              <button onclick="resetInlineOcr()" class="btn-ghost" style="font-size:11px;padding:8px">↺</button>
+            </div>
+          </div>
+          <div id="inlineOcrError" style="display:none;margin-top:10px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:12px">
+            <div style="font-size:11px;font-weight:700;color:#fca5a5;margin-bottom:4px">⚠ Could not extract text</div>
+            <div id="inlineOcrErrMsg" style="font-size:12px;color:var(--text2)"></div>
+            <button onclick="resetInlineOcr()" style="margin-top:8px;background:transparent;border:1px solid rgba(239,68,68,.3);border-radius:5px;padding:5px 12px;color:#fca5a5;font-size:11px;font-family:var(--mono);cursor:pointer">TRY AGAIN</button>
+          </div>
+        </div>
+
+        <div class="action-row">
+          <button class="btn-primary" id="analyzeBtn" onclick="analyze()">▶ ANALYZE CONVERSATION</button>
+          <button class="btn-ghost" id="replayTrigger" onclick="startReplay()" disabled>↺ REPLAY</button>
+          <span id="statusText"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conversation viewer (after analysis) -->
+    <div class="panel" id="convViewerPanel" style="display:none">
+      <div class="panel-header">
+        <div class="panel-icon" style="background:rgba(34,197,94,.1);color:var(--safe)">💬</div>
+        <div class="panel-title">Message Analysis</div>
+      </div>
+      <div class="panel-body">
+        <div class="conv-msgs" id="convMsgs"></div>
+      </div>
+    </div>
+
+    <!-- Replay panel -->
+    <div class="panel" id="replayPanel">
+      <div class="panel-header">
+        <div class="panel-icon" style="background:rgba(245,158,11,.1);color:var(--warn)">▶</div>
+        <div class="panel-title">Conversation Replay</div>
+        <span style="font-size:11px;color:var(--text3);margin-left:auto;font-family:var(--mono)" id="replayCtr">— / —</span>
+      </div>
+      <div class="panel-body">
+        <div class="replay-controls">
+          <button class="replay-btn" onclick="replayStep(-1)">⏮</button>
+          <button class="replay-btn" id="playPauseBtn" onclick="togglePlay()">▶</button>
+          <button class="replay-btn" onclick="replayStep(1)">⏭</button>
+          <input type="range" class="replay-slider" id="replaySlider" min="0" value="0" oninput="replayGoto(+this.value)"/>
+        </div>
+        <div class="replay-state-display">
+          <div class="rsd-box"><div class="rsd-label">Current State</div><div class="rsd-val" id="rsdState">—</div></div>
+          <div class="rsd-box"><div class="rsd-label">Risk</div><div class="rsd-val" id="rsdRisk">—</div></div>
+          <div class="rsd-box"><div class="rsd-label">Trigger</div><div class="rsd-val" id="rsdTrigger" style="font-size:10px">—</div></div>
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:8px;text-align:center">UI-ONLY VISUALIZATION · Per-turn model scores simulated from single-call output</div>
+      </div>
+    </div>
+
+    <!-- Session history -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-icon" style="background:rgba(148,163,184,.1);color:var(--text2)">🕐</div>
+        <div class="panel-title">Recent Analyses</div>
+      </div>
+      <div class="panel-body">
+        <div class="session-list" id="sessionList">
+          <div class="session-empty">No analyses yet</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── CENTER COLUMN ── -->
+  <div class="center-col">
+
+    <!-- Temporal behaviour graph -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-icon" style="background:rgba(56,189,248,.1);color:var(--cyan)">⬡</div>
+        <div class="panel-title">Temporal Behaviour Graph</div>
+        <span style="font-size:10px;color:var(--text3);margin-left:auto">Click a state node for details</span>
+      </div>
+      <div class="panel-body" style="padding:8px 16px 14px">
+        <div class="graph-container" id="graphContainer">
+          <svg id="graphSvg"></svg>
+          <div id="graphNodes" style="position:absolute;top:0;left:0;width:100%;height:200px;display:flex;align-items:center;justify-content:center;gap:0">
+            <div style="font-size:12px;color:var(--text3)">Run an analysis to see the behaviour graph</div>
+          </div>
+        </div>
+        <!-- State detail popup -->
+        <div id="stateDetail" style="margin-top:8px;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;padding:12px">
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">State Details</div>
+          <div id="stateDetailContent" style="font-size:12px;color:var(--text2)">Select a state node above</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Risk evolution chart -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-icon" style="background:rgba(239,68,68,.1);color:var(--crit)">📈</div>
+        <div class="panel-title">Risk Evolution</div>
+        <span style="font-size:10px;color:var(--text3);margin-left:auto">Conversation Turns → Risk %</span>
+      </div>
+      <div class="panel-body">
+        <div class="chart-wrap">
+          <canvas id="riskChart"></canvas>
+        </div>
+        <div style="font-size:10px;color:var(--text3);text-align:center;margin-top:6px">UI-ONLY VISUALIZATION · Risk interpolated from single-analysis call · Per-turn API support planned</div>
+      </div>
+    </div>
+
+    <!-- Investigation pipeline -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-icon" style="background:rgba(56,189,248,.1);color:var(--cyan)">→</div>
+        <div class="panel-title">Investigation Pipeline</div>
+      </div>
+      <div class="pipeline" id="pipeline">
+        <div class="pipe-step" onclick="pipeClick('conv')"><div class="pipe-icon">💬</div><div class="pipe-label">Conversation</div><div class="pipe-val" id="pp-conv">—</div></div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step" onclick="pipeClick('signal')"><div class="pipe-icon">⚡</div><div class="pipe-label">Behav. Signal</div><div class="pipe-val" id="pp-signal">—</div></div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step" onclick="pipeClick('state')"><div class="pipe-icon">⬡</div><div class="pipe-label">State Transition</div><div class="pipe-val" id="pp-state">—</div></div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step" onclick="pipeClick('risk')"><div class="pipe-icon">🎯</div><div class="pipe-label">Risk Update</div><div class="pipe-val" id="pp-risk">—</div></div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step" onclick="pipeClick('next')"><div class="pipe-icon">🔮</div><div class="pipe-label">Next State</div><div class="pipe-val" id="pp-next">—</div></div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step" onclick="pipeClick('decision')"><div class="pipe-icon">🚨</div><div class="pipe-label">Decision</div><div class="pipe-val" id="pp-decision">—</div></div>
+      </div>
+    </div>
+
+    <!-- Comparison section -->
+    <div class="panel" id="compareSection">
+      <div class="panel-header">
+        <div class="panel-icon" style="background:rgba(148,163,184,.1);color:var(--text2)">⇄</div>
+        <div class="panel-title">Comparison Mode</div>
+        <button class="hdr-btn" style="margin-left:auto" onclick="toggleCompare()">✕ Close</button>
+      </div>
+      <div class="panel-body">
+        <div class="compare-grid">
+          <div class="cmp-panel">
+            <div class="cmp-label">Conversation A (current)</div>
+            <div class="cmp-risk" id="cmpRiskA" style="color:var(--text3)">—</div>
+            <div class="cmp-meta" id="cmpMetaA">Run an analysis first</div>
+          </div>
+          <div class="cmp-panel">
+            <div class="cmp-label">Conversation B (saved)</div>
+            <div class="cmp-risk" id="cmpRiskB" style="color:var(--text3)">—</div>
+            <div class="cmp-meta" id="cmpMetaB">Select from session history</div>
+          </div>
+        </div>
+        <div id="cmpDiff" style="margin-top:10px;display:none">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Risk difference: <span id="cmpDiffVal" style="font-family:var(--mono);font-weight:700;color:var(--text)">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Intervention panel -->
+    <div class="panel full-row" id="interventionPanel">
+      <div class="panel-body">
+        <div class="intervention-alert">
+          <div class="intervention-title">⚠ SOCIAL ENGINEERING THREAT DETECTED</div>
+          <ul class="intervention-actions">
+            <li>DO NOT SHARE OTP OR PIN</li>
+            <li>DO NOT SEND MONEY OR TRANSFER FUNDS</li>
+            <li>DO NOT PROVIDE BANKING CREDENTIALS</li>
+            <li>VERIFY THROUGH OFFICIAL CHANNEL ONLY</li>
+          </ul>
+          <div class="intervention-btns">
+            <button class="btn-block" onclick="confirmAction('block')">🚫 BLOCK</button>
+            <button class="btn-mark" onclick="confirmAction('scam')">⚠ MARK AS SCAM</button>
+            <button class="btn-monitor">👁 CONTINUE MONITORING</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── RIGHT COLUMN ── -->
+  <div class="right-col">
+
+    <!-- Live risk gauge -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-icon" style="background:rgba(239,68,68,.1);color:var(--crit)">🎯</div>
+        <div class="panel-title">Live Risk Intelligence</div>
+      </div>
+      <div class="panel-body">
+        <div class="gauge-wrap">
+          <svg class="gauge-svg" width="180" height="95" viewBox="0 0 180 95">
+            <defs>
+              <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#22c55e"/>
+                <stop offset="35%" stop-color="#f59e0b"/>
+                <stop offset="65%" stop-color="#f97316"/>
+                <stop offset="100%" stop-color="#ef4444"/>
+              </linearGradient>
+            </defs>
+            <path d="M18 90 A72 72 0 0 1 162 90" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="12" stroke-linecap="round"/>
+            <path id="gaugeFill" d="M18 90 A72 72 0 0 1 162 90" fill="none" stroke="url(#g1)" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 226" style="transition:stroke-dasharray 0.9s cubic-bezier(.4,0,.2,1)"/>
+            <g id="gaugeNeedle" transform="rotate(-90 90 90)">
+              <line x1="90" y1="90" x2="90" y2="28" stroke="#e2e8f0" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="90" cy="90" r="4" fill="#e2e8f0"/>
+            </g>
+          </svg>
+          <div class="risk-num" id="riskNum" style="color:var(--text3)">—</div>
+          <div class="risk-badge rb-safe" id="riskBadge">Awaiting Input</div>
+        </div>
+        <div class="risk-delta" id="riskDelta" style="justify-content:center;display:none">
+          <div class="delta-item"><div class="delta-label">Previous</div><div class="delta-val" id="dPrev">—</div></div>
+          <div class="delta-div"></div>
+          <div class="delta-item"><div class="delta-label">Current</div><div class="delta-val" id="dCurr">—</div></div>
+          <div class="delta-div"></div>
+          <div class="delta-item"><div class="delta-label">Change</div><div class="delta-val delta-change" id="dChange">—</div></div>
+        </div>
+        <div class="thr-legend">
+          <div class="thr-item"><div class="thr-dot" style="background:var(--safe)"></div> Safe &lt;20%</div>
+          <div class="thr-item"><div class="thr-dot" style="background:var(--warn)"></div> Warn 20–35%</div>
+          <div class="thr-item"><div class="thr-dot" style="background:var(--crit)"></div> High &gt;35%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Behaviour stats -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-icon" style="background:rgba(56,189,248,.1);color:var(--cyan)">⬡</div>
+        <div class="panel-title">Behaviour Analysis</div>
+      </div>
+      <div class="panel-body">
+        <div class="mini-grid">
+          <div class="mini-stat"><div class="mini-label">Current State</div><div class="mini-val state-val" id="mCurState">—</div></div>
+          <div class="mini-stat"><div class="mini-label">Predicted Next</div><div class="mini-val state-val" id="mNextState" style="color:var(--warn)">—</div></div>
+          <div class="mini-stat"><div class="mini-label">ETA to Next</div><div class="mini-val" id="mEta">—</div></div>
+          <div class="mini-stat"><div class="mini-label">Turns</div><div class="mini-val" id="mTurns">—</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Why flagged -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-icon" style="background:rgba(245,158,11,.1);color:var(--warn)">🔍</div>
+        <div class="panel-title">Why ATBG Flagged This</div>
+      </div>
+      <div class="panel-body" id="whyPanel">
+        <div style="font-size:12px;color:var(--text3)">Run an analysis to see the explanation.</div>
+      </div>
+    </div>
+
+    <!-- Evidence intelligence -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-icon" style="background:rgba(239,68,68,.1);color:var(--crit)">⚠</div>
+        <div class="panel-title">Evidence Intelligence</div>
+      </div>
+      <div class="panel-body">
+        <div class="evidence-list" id="evidenceList">
+          <div class="evidence-empty">No evidence detected yet</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Model intelligence -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-icon" style="background:rgba(56,189,248,.1);color:var(--cyan)">🧠</div>
+        <div class="panel-title">Model Intelligence</div>
+      </div>
+      <div class="panel-body">
+        <div class="model-intel">
+          <div class="model-bar-row"><div class="model-bar-label">Model A</div><div class="model-bar-track"><div class="model-bar-fill" style="width:60%;background:var(--cyan)"></div></div><div class="model-bar-val">60%</div></div>
+          <div class="model-bar-row"><div class="model-bar-label">Model B</div><div class="model-bar-track"><div class="model-bar-fill" style="width:40%;background:#818cf8"></div></div><div class="model-bar-val">40%</div></div>
+          <div style="font-size:10px;color:var(--text3);text-align:center;padding:4px 0">Score Fusion → Ensemble Output</div>
+        </div>
+        <div class="metrics-grid" style="margin-top:8px">
+          <div class="metric-cell"><div class="metric-name">AUPRC</div><div class="metric-val">0.889</div></div>
+          <div class="metric-cell"><div class="metric-name">ROC-AUC</div><div class="metric-val">0.899</div></div>
+          <div class="metric-cell"><div class="metric-name">Precision</div><div class="metric-val">0.968</div></div>
+          <div class="metric-cell"><div class="metric-name">FPR@95</div><div class="metric-val">0.328</div></div>
+        </div>
+        <div class="metrics-note">TEST-SET MODEL METRICS</div>
+        <div style="font-size:10px;color:var(--text3);text-align:center;margin-top:4px" id="modelVersionDisplay">—</div>
+      </div>
+    </div>
+
+    <!-- What-if simulator -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-icon" style="background:rgba(139,92,246,.1);color:#a78bfa)">🧪</div>
+        <div class="panel-title">What-If Simulator</div>
+        <span style="font-size:9px;font-family:var(--mono);color:var(--text3);margin-left:auto;background:rgba(139,92,246,.1);border-radius:4px;padding:2px 6px">SCENARIO ESTIMATE</span>
+      </div>
+      <div class="panel-body">
+        <div class="sim-grid" id="simGrid">
+          <div style="font-size:12px;color:var(--text3)">Run an analysis to enable simulation.</div>
+        </div>
+        <div class="sim-result" id="simResult" style="display:none">
+          <div class="sim-box"><div class="sim-box-label">Current Risk</div><div class="sim-box-val" id="simCurrent" style="color:var(--crit)">—</div></div>
+          <div style="text-align:center;font-size:20px;color:var(--text3)">→</div>
+          <div class="sim-box"><div class="sim-box-label">Simulated Risk</div><div class="sim-box-val" id="simOutput" style="color:var(--warn)">—</div></div>
+        </div>
+        <div class="sim-note">SCENARIO ESTIMATE — Not a real model prediction. For demonstration purposes only.</div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+const API = "http://localhost:8000";
+
+// ── Constants ──────────────────────────────────────────────────────────
+const ESCALATION = new Set(["fear","urgency","credential_request","payment_request","verification_bypass","isolation","reciprocity_bait"]);
+const STATE_COLORS = {
+  benign:"#22c55e", greeting:"#38bdf8", rapport_trust:"#818cf8",
+  authority:"#f59e0b", fear:"#f97316", urgency:"#ef4444",
+  credential_request:"#ef4444", payment_request:"#ef4444",
+  verification_bypass:"#f97316", isolation:"#f97316",
+  reciprocity_bait:"#f59e0b", exit_closure:"#64748b"
+};
+const fmt = s => (s||"").replace(/_/g," ");
+const riskPct = s => s < 0.20 ? "safe" : s < 0.35 ? "warn" : s < 0.60 ? "danger" : "crit";
+const riskLabel = s => s < 0.20 ? "SAFE" : s < 0.35 ? "SUSPICIOUS" : s < 0.60 ? "HIGH RISK" : "CRITICAL";
+
+// Boost rules (same as before)
+const BOOST_RULES = [
+  { score:35, label:"OTP request", pattern:/\b(otp|one[- ]time\s*(pass|pin|code)|share.{0,20}code|read.{0,20}code|give.{0,20}otp)\b/i },
+  { score:35, label:"CVV/card demand", pattern:/\b(cvv|card\s*number|debit\s*card\s*number|credit\s*card\s*number)\b/i },
+  { score:30, label:"UPI scam", pattern:/\bsend.{0,30}(upi|wallet|paytm|phonepay|gpay)\b/i },
+  { score:30, label:"Remote access request", pattern:/\b(remote\s*access|anydesk|teamviewer|download.{0,20}app.{0,20}fix)\b/i },
+  { score:25, label:"Account freeze threat", pattern:/\b(block|suspend|freeze|close).{0,30}(account|card|number).{0,30}(today|hours?|minutes?|immediately)\b/i },
+  { score:20, label:"Urgency + verify", pattern:/\b(verify|confirm|complete).{0,20}(immediately|right now|within|urgent)\b/i },
+  { score:20, label:"Don't contact bank", pattern:/\b(do not|don.t|never).{0,20}(contact|call|reach|go to).{0,20}(bank|branch|official)\b/i },
+  { score:20, label:"Processing fee scam", pattern:/\b(processing\s*fee|registration\s*fee|small\s*fee|advance\s*fee).{0,40}(prize|lottery|refund|transfer)\b/i },
+  { score:20, label:"Suspicious link", pattern:/\b(click\s*this\s*link|open\s*this\s*link|secure\s*portal|verification\s*link)\b/i },
+  { score:18, label:"KYC fraud", pattern:/\b(kyc).{0,30}(suspend|block|incomplete|update\s*now|expire)\b/i },
+  { score:12, label:"Fake authority", pattern:/\b(calling\s*from|officer|department|government\s*of|reserve\s*bank|rbi\s*guideline|income\s*tax\s*department)\b/i },
+  { score:10, label:"Lottery/prize bait", pattern:/\b(you.{0,10}won|lucky\s*draw|lucky\s*winner|prize\s*money|claim\s*your)\b/i },
+  { score:10, label:"Credential fishing", pattern:/\b(full\s*name.{0,30}(account|date\s*of\s*birth)|aadhaar.{0,30}pan|pan.{0,30}aadhaar).{0,30}(verify|confirm|enter|provide)\b/i },
+];
+const BENIGN_SIGS = [
+  /\b(hr@|onboarding|joining\s*form|first\s*day|employee\s*id|laptop\s*will\s*be\s*ready)\b/i,
+  /\b(apollo\.hospitals|patient\s*portal|discharge\s*summary|insurance\s*claim)\b/i,
+  /\b(order\s*number|tracking|logistics|delivery\s*status|refund\s*from\s*your\s*orders\s*page)\b/i,
+  /\b(password\s*reset\s*link|reset\s*it\s*successfully|account\s*settings)\b/i,
+];
+function computeBoost(txt){
+  let boost=0; const matched=[];
+  const bm = BENIGN_SIGS.filter(p=>p.test(txt)).length;
+  const mul = bm>=2?0.2:bm===1?0.5:1;
+  for(const r of BOOST_RULES){ if(r.pattern.test(txt)){ const c=r.score*mul; if(c>0){ boost+=c; matched.push(r.label); } } }
+  return { boost: Math.min(boost,55), matched };
+}
+
+// ── State ─────────────────────────────────────────────────────────────
+let lastResult = null, lastFinalPct = 0, lastTurns = [], sessions = [], prevPct = 0;
+let replayMode = false, replayIdx = 0, replayTimer = null, compareMode = false;
+
+// ── Loading animation ─────────────────────────────────────────────────
+async function showLoading(){
+  document.getElementById("loadingOverlay").classList.add("active");
+  const steps = ["ls1","ls2","ls3","ls4","ls5"];
+  for(let i=0;i<steps.length;i++){
+    const el = document.getElementById(steps[i]);
+    el.classList.add("active");
+    el.querySelector(".load-icon").textContent = "●";
+    await new Promise(r=>setTimeout(r, 350));
+    el.classList.remove("active"); el.classList.add("done");
+    el.querySelector(".load-icon").textContent = "✓";
+  }
+  await new Promise(r=>setTimeout(r,200));
+}
+function hideLoading(){ document.getElementById("loadingOverlay").classList.remove("active"); ["ls1","ls2","ls3","ls4","ls5"].forEach(id=>{const el=document.getElementById(id);el.classList.remove("active","done");el.querySelector(".load-icon").textContent="○";}); }
+
+// ── Parse turns ───────────────────────────────────────────────────────
+function parseTurns(raw){
+  return raw.split("\n").map(l=>l.trim()).filter(Boolean).map((line,i)=>{
+    const idx=line.indexOf(":");
+    return { turn_index:i+1, speaker:idx>-1?line.slice(0,idx).trim():"unknown", text:idx>-1?line.slice(idx+1).trim():line, timestamp:null };
+  });
+}
+
+// ── Main analysis ─────────────────────────────────────────────────────
+async function analyze(){
+  const btn = document.getElementById("analyzeBtn");
+  const status = document.getElementById("statusText");
+  let rawText = document.getElementById("convo").value;
+  if(document.getElementById("rawInput").style.display==="none"){
+    rawText = Array.from(document.querySelectorAll(".msg-row")).map(r=>{
+      const sp=r.querySelector(".msg-speaker-sel").value; const tx=r.querySelector(".msg-text-in").value.trim();
+      return tx?`${sp}: ${tx}`:"";
+    }).filter(Boolean).join("\n");
+  }
+  const turns = parseTurns(rawText);
+  if(!turns.length){ toast("Add at least one turn to analyze."); return; }
+  lastTurns = turns;
+  btn.disabled=true; status.textContent="";
+
+  const loadingP = showLoading();
+  try {
+    const resp = await fetch(`${API}/analyze`,{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({source:"dashboard",channel:"chat",language:"en",turns}) });
+    await loadingP;
+    if(!resp.ok) throw new Error(`API returned ${resp.status}`);
+    const d = await resp.json();
+    const fullText = turns.map(t=>t.text).join(" ");
+    const {boost,matched} = computeBoost(fullText);
+    const modelPct = Math.round(d.risk_score*100);
+    const finalPct = Math.min(modelPct+Math.round(boost),99);
+
+    prevPct = lastFinalPct || 0;
+    lastFinalPct = finalPct; lastResult = d;
+
+    render(d, modelPct, finalPct, matched, turns);
+    document.getElementById("modelVersionDisplay").textContent = `model: ${d.model_version}`;
+    addSession(turns, finalPct, d.current_state);
+    document.getElementById("replayTrigger").disabled=false;
+    toast(`Analysis complete — ${riskLabel(finalPct/100)}: ${finalPct}%`, finalPct>35?"danger":"safe");
+  } catch(e) {
+    hideLoading();
+    status.textContent=`Error: ${e.message}`;
+    toast("Analysis failed — is the API running on port 8000?","danger");
+  } finally { btn.disabled=false; }
+}
+
+// ── Render all panels ─────────────────────────────────────────────────
+function render(d, modelPct, finalPct, matched, turns){
+  hideLoading();
+  const level = riskPct(finalPct/100);
+  const color = STATE_COLORS[d.current_state]||"#64748b";
+
+  // Gauge
+  const arcLen=Math.PI*72; const fill=(finalPct/100)*arcLen;
+  document.getElementById("gaugeFill").style.strokeDasharray=`${fill} ${arcLen}`;
+  const deg=-90+(finalPct/100)*180;
+  document.getElementById("gaugeNeedle").setAttribute("transform",`rotate(${deg} 90 90)`);
+  const rNum=document.getElementById("riskNum"); rNum.textContent=`${finalPct}%`;
+  const gc=finalPct<20?"var(--safe)":finalPct<35?"var(--warn)":finalPct<60?"var(--danger)":"var(--crit)";
+  rNum.style.color=gc;
+  const badge=document.getElementById("riskBadge"); badge.textContent=riskLabel(finalPct/100);
+  badge.className=`risk-badge rb-${level}`;
+
+  // Delta
+  const deltaEl=document.getElementById("riskDelta"); deltaEl.style.display="flex";
+  document.getElementById("dPrev").textContent=prevPct?`${prevPct}%`:"N/A";
+  document.getElementById("dCurr").textContent=`${finalPct}%`;
+  const diff=finalPct-prevPct; const dEl=document.getElementById("dChange");
+  dEl.textContent=prevPct?(diff>=0?`+${diff}%`:`${diff}%`):"—";
+  dEl.className=`delta-val delta-change ${diff>0?"pos":"neg"}`;
+
+  // Mini stats
+  document.getElementById("mCurState").textContent=fmt(d.current_state)||"—";
+  const np=d.next_state_prob?` (${Math.round(d.next_state_prob*100)}%)`:"";
+  document.getElementById("mNextState").textContent=fmt(d.next_state_pred)+np||"—";
+  document.getElementById("mEta").textContent=d.eta_seconds?`${Math.round(d.eta_seconds)}s`:"—";
+  document.getElementById("mTurns").textContent=d.up_to_turn_index||turns.length;
+
+  // Trajectory / graph
+  const raw=d.explanation?.trajectory||"";
+  const match=raw.match(/trajectory:([\s\S]+?)\.(\s|$)/i);
+  const trajStates=match?match[1].split("→").map(s=>s.trim().toLowerCase()).filter(Boolean):[];
+  renderGraph(trajStates,d.current_state,d.next_state_pred);
+
+  // Risk evolution chart
+  renderChart(turns.length,finalPct,trajStates);
+
+  // Conversation viewer
+  renderConvViewer(turns,trajStates);
+
+  // Pipeline
+  const signal = matched.length>0?matched[0]:(trajStates.find(s=>ESCALATION.has(s))||"benign");
+  document.getElementById("pp-conv").textContent=`${turns.length} turns`;
+  document.getElementById("pp-signal").textContent=signal;
+  document.getElementById("pp-state").textContent=`${fmt(d.current_state)||"—"}`;
+  document.getElementById("pp-risk").textContent=`${finalPct}%`;
+  document.getElementById("pp-next").textContent=fmt(d.next_state_pred)||"—";
+  document.getElementById("pp-decision").textContent=riskLabel(finalPct/100);
+
+  // Why panel
+  renderWhy(d, trajStates, matched, modelPct, finalPct);
+
+  // Evidence
+  renderEvidence(d,matched,turns,trajStates);
+
+  // Intervention
+  const ip=document.getElementById("interventionPanel");
+  ip.style.display=finalPct>35?"block":"none";
+
+  // What-if simulator
+  renderSimulator(matched,finalPct);
+
+  // Comparison
+  document.getElementById("cmpRiskA").textContent=`${finalPct}%`;
+  document.getElementById("cmpRiskA").style.color=gc;
+  document.getElementById("cmpMetaA").textContent=`${riskLabel(finalPct/100)} · ${fmt(d.current_state)} → ${fmt(d.next_state_pred)} · ${turns.length} turns`;
+}
+
+// ── Render graph ──────────────────────────────────────────────────────
+function renderGraph(traj, current, next){
+  const container=document.getElementById("graphNodes");
+  const svg=document.getElementById("graphSvg");
+  if(!traj.length){ container.innerHTML='<div style="font-size:12px;color:var(--text3)">No trajectory data</div>'; svg.innerHTML=""; return; }
+  const unique=[...new Set(traj)];
+  const H=200; const W=container.parentElement.clientWidth||500;
+  const n=unique.length; const spacing=Math.min(W/(n+1),100);
+  const startX=(W-spacing*(n-1))/2;
+  container.innerHTML=""; svg.innerHTML="";
+
+  const positions={};
+  unique.forEach((state,i)=>{
+    const x=startX+i*spacing; const y=H/2;
+    positions[state]={x,y};
+    const isCurrent=state===current; const isNext=state===next;
+    const c=STATE_COLORS[state]||"#475569";
+    const div=document.createElement("div");
+    div.className="graph-state";
+    div.style.cssText=`left:${x-32}px;top:${y-32}px;`;
+    div.innerHTML=`<div class="gs-node ${isCurrent?"current":isNext?"predicted":""}" style="border-color:${c};color:${c};background:${c}18;${isCurrent?`box-shadow:0 0 20px ${c}40`:""}">${fmt(state).replace(" ","\n")}</div>`;
+    div.onclick=()=>showStateDetail(state,traj,current,next,c);
+    container.appendChild(div);
+  });
+
+  // Draw arrows
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  for(let i=0;i<traj.length-1;i++){
+    const a=traj[i], b=traj[i+1];
+    if(!positions[a]||!positions[b]||a===b) continue;
+    const {x:x1,y:y1}=positions[a], {x:x2,y:y2}=positions[b];
+    const line=document.createElementNS("http://www.w3.org/2000/svg","line");
+    line.setAttribute("x1",x1); line.setAttribute("y1",y1);
+    line.setAttribute("x2",x2); line.setAttribute("y2",y2);
+    line.setAttribute("stroke","rgba(255,255,255,0.1)"); line.setAttribute("stroke-width","1.5");
+    svg.appendChild(line);
+  }
+}
+
+function showStateDetail(state, traj, current, next, color){
+  const idx=traj.indexOf(state); const prev=idx>0?traj[idx-1]:null;
+  document.getElementById("stateDetail").style.display="block";
+  document.getElementById("stateDetailContent").innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="width:10px;height:10px;border-radius:50%;background:${color};display:inline-block"></span>
+      <strong style="color:${color}">${fmt(state)}</strong>
+      ${state===current?'<span style="font-size:9px;background:rgba(56,189,248,.15);border:1px solid rgba(56,189,248,.3);color:#38bdf8;padding:1px 6px;border-radius:4px;font-family:var(--mono)">CURRENT</span>':""}
+      ${state===next?'<span style="font-size:9px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);color:#f59e0b;padding:1px 6px;border-radius:4px;font-family:var(--mono)">PREDICTED NEXT</span>':""}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Previous state</div><div style="font-size:11px;color:var(--text2)">${prev?fmt(prev):"Start"}</div></div>
+      <div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Next state</div><div style="font-size:11px;color:var(--text2)">${state===next?fmt(next):"—"}</div></div>
+    </div>
+    <div style="font-size:10px;color:var(--text3);margin-top:8px">Escalation state: ${ESCALATION.has(state)?"Yes — indicates manipulative behaviour":"No — benign or transitional"}</div>
+  `;
+  toast(`State: ${fmt(state)}`, ESCALATION.has(state)?"danger":"safe");
+}
+
+// ── Render chart ──────────────────────────────────────────────────────
+let chartInstance=null;
+function renderChart(nTurns, finalPct, traj){
+  const canvas=document.getElementById("riskChart");
+  const ctx=canvas.getContext("2d");
+  if(chartInstance){ chartInstance.lines=[]; chartInstance=null; ctx.clearRect(0,0,canvas.width,canvas.height); }
+  // Generate interpolated risk curve
+  const data=[];
+  for(let i=0;i<nTurns;i++){
+    const frac=(i+1)/nTurns; let risk;
+    if(frac<0.3) risk=Math.round(5+frac*40);
+    else if(frac<0.7) risk=Math.round(15+frac*60);
+    else risk=Math.round(finalPct*(0.7+frac*0.3));
+    data.push(Math.min(risk,99));
+  }
+  data[data.length-1]=finalPct;
+  const labels=data.map((_,i)=>`T${i+1}`);
+  // Simple canvas chart (no dependencies)
+  const W=canvas.offsetWidth||400; const H=canvas.offsetHeight||180;
+  canvas.width=W; canvas.height=H;
+  const pad={t:16,r:16,b:28,l:32};
+  const cw=W-pad.l-pad.r; const ch=H-pad.t-pad.b;
+  ctx.clearRect(0,0,W,H);
+  // Grid
+  ctx.strokeStyle="rgba(255,255,255,0.05)"; ctx.lineWidth=1;
+  [0,25,50,75,100].forEach(v=>{ const y=pad.t+ch*(1-v/100); ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+cw,y);ctx.stroke(); ctx.fillStyle="rgba(148,163,184,0.5)";ctx.font="9px JetBrains Mono";ctx.fillText(v,2,y+3); });
+  // Gradient fill
+  const grd=ctx.createLinearGradient(0,pad.t,0,pad.t+ch);
+  grd.addColorStop(0,"rgba(239,68,68,0.2)"); grd.addColorStop(1,"rgba(239,68,68,0)");
+  ctx.beginPath();
+  data.forEach((v,i)=>{ const x=pad.l+i/(data.length-1||1)*cw; const y=pad.t+ch*(1-v/100); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+  ctx.lineTo(pad.l+cw,pad.t+ch); ctx.lineTo(pad.l,pad.t+ch); ctx.closePath();
+  ctx.fillStyle=grd; ctx.fill();
+  // Line
+  ctx.beginPath(); ctx.strokeStyle="#ef4444"; ctx.lineWidth=2; ctx.lineJoin="round";
+  data.forEach((v,i)=>{ const x=pad.l+i/(data.length-1||1)*cw; const y=pad.t+ch*(1-v/100); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+  ctx.stroke();
+  // Dots
+  data.forEach((v,i)=>{ const x=pad.l+i/(data.length-1||1)*cw; const y=pad.t+ch*(1-v/100); ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fillStyle="#ef4444";ctx.fill();ctx.strokeStyle=v<20?"#22c55e":v<35?"#f59e0b":"#ef4444";ctx.lineWidth=1.5;ctx.stroke(); });
+  // X labels
+  ctx.fillStyle="rgba(148,163,184,0.5)"; ctx.font="9px JetBrains Mono"; ctx.textAlign="center";
+  if(data.length<=12){ data.forEach((_,i)=>{ const x=pad.l+i/(data.length-1||1)*cw; ctx.fillText(`T${i+1}`,x,H-6); }); }
+  else { [0,Math.floor(data.length/2),data.length-1].forEach(i=>{ const x=pad.l+i/(data.length-1||1)*cw; ctx.fillText(`T${i+1}`,x,H-6); }); }
+}
+
+// ── Conversation viewer ───────────────────────────────────────────────
+function renderConvViewer(turns, trajStates){
+  const panel=document.getElementById("convViewerPanel"); panel.style.display="block";
+  const container=document.getElementById("convMsgs"); container.innerHTML="";
+  turns.forEach((t,i)=>{
+    const state=trajStates[i]||"benign"; const isEsc=ESCALATION.has(state);
+    const spClass=t.speaker.toLowerCase().includes("victim")||t.speaker.toLowerCase()==="victim"?"victim":t.speaker.toLowerCase().includes("user")||t.speaker.toLowerCase()==="me"?"victim":"attacker";
+    const div=document.createElement("div");
+    div.className=`msg-bubble ${spClass}`; div.id=`msg-${i}`;
+    div.innerHTML=`<div class="msg-meta"><span class="msg-speaker ${spClass}">${t.speaker.toUpperCase()}</span><span class="msg-turn">Turn ${t.turn_index}</span></div><div class="msg-text">${t.text}</div>`;
+    if(isEsc){ const tags=div.querySelector(".msg-text"); tags.insertAdjacentHTML("afterend",`<div class="msg-tags"><span class="msg-tag escalation">${fmt(state).toUpperCase()}</span></div>`); }
+    div.onclick=()=>{ document.querySelectorAll(".msg-bubble").forEach(m=>m.classList.remove("selected")); div.classList.add("selected"); };
+    container.appendChild(div);
+  });
+}
+
+// ── Why panel ─────────────────────────────────────────────────────────
+function renderWhy(d, trajStates, matched, modelPct, finalPct){
+  const panel=document.getElementById("whyPanel"); panel.innerHTML="";
+  const cs=d.current_state||"benign"; const ns=d.next_state_pred||"benign";
+  const escalating=trajStates.filter(s=>ESCALATION.has(s));
+  const stateClass=s=>ESCALATION.has(s)?"escalation":"neutral";
+
+  let html=`<div class="why-section"><div class="why-label">Behaviour Detected</div><div class="why-content"><span class="state-pill ${stateClass(cs)}">${fmt(cs)}</span></div></div>`;
+  if(escalating.length>0){ html+=`<div class="why-section"><div class="why-label">State Transition</div><div class="why-transition">${escalating.map(s=>`<span class="state-pill escalation">${fmt(s)}</span>`).join('<span style="color:var(--text3)">→</span>')}</div></div>`; }
+  html+=`<div class="why-section"><div class="why-label">Next State Prediction</div><div class="why-content"><span class="state-pill neutral">${fmt(ns)}</span></div></div>`;
+  if(matched.length>0){ html+=`<div class="boost-note">⚡ Keyword signals: ${matched.join(", ")} — Model: ${modelPct}% → Adjusted: ${finalPct}%</div>`; }
+  panel.innerHTML=html;
+}
+
+// ── Evidence panel ────────────────────────────────────────────────────
+function renderEvidence(d, matched, turns, trajStates){
+  const list=document.getElementById("evidenceList"); list.innerHTML="";
+  const arts=d.artifacts||[];
+  const items=[
+    ...matched.map(m=>({ icon:"⚠", type:m.toUpperCase(), text:"Detected in conversation" })),
+    ...arts.map(a=>({ icon:"🔗", type:a.artifact_type.toUpperCase(), text:a.value })),
+  ];
+  if(!items.length){ list.innerHTML='<div class="evidence-empty">No suspicious evidence detected</div>'; return; }
+  items.forEach((ev,i)=>{
+    const div=document.createElement("div"); div.className="evidence-item";
+    div.innerHTML=`<div class="evidence-header"><span class="evidence-icon">${ev.icon}</span><span class="evidence-type">${ev.type}</span></div><div class="evidence-text">${ev.text}</div>`;
+    div.onclick=()=>{ toast(`Evidence: ${ev.type}`, "warn"); };
+    list.appendChild(div);
+  });
+}
+
+// ── Simulator ─────────────────────────────────────────────────────────
+function renderSimulator(matched, finalPct){
+  const grid=document.getElementById("simGrid"); const result=document.getElementById("simResult");
+  if(!matched.length){ grid.innerHTML='<div style="font-size:12px;color:var(--text3)">No keyword signals detected — no simulation available.</div>'; result.style.display="none"; return; }
+  grid.innerHTML=""; result.style.display="grid";
+  document.getElementById("simCurrent").textContent=`${finalPct}%`;
+  matched.forEach(m=>{
+    const rule=BOOST_RULES.find(r=>r.label===m); if(!rule)return;
+    const cb=document.createElement("div"); cb.className="sim-toggle";
+    cb.innerHTML=`<input type="checkbox" id="sim_${m.replace(/ /g,'_')}" checked onchange="updateSim(${finalPct})"><label for="sim_${m.replace(/ /g,'_')}">${m}</label><span class="boost-tag">+${Math.round(rule.score)}%</span>`;
+    grid.appendChild(cb);
+  });
+  document.getElementById("simOutput").textContent=`${finalPct}%`;
+}
+function updateSim(base){
+  const fullText=lastTurns.map(t=>t.text).join(" ");
+  const bm=BENIGN_SIGS.filter(p=>p.test(fullText)).length;
+  const mul=bm>=2?0.2:bm===1?0.5:1;
+  let boost=0;
+  document.querySelectorAll("#simGrid .sim-toggle input").forEach(cb=>{
+    if(cb.checked){ const m=cb.nextElementSibling.textContent; const r=BOOST_RULES.find(rr=>rr.label===m); if(r) boost+=r.score*mul; }
+  });
+  const modelPct=lastResult?Math.round(lastResult.risk_score*100):base;
+  const sim=Math.min(modelPct+Math.round(boost),99);
+  const out=document.getElementById("simOutput"); out.textContent=`${sim}%`;
+  out.style.color=sim<20?"var(--safe)":sim<35?"var(--warn)":"var(--crit)";
+}
+
+// ── Session history ───────────────────────────────────────────────────
+function addSession(turns, pct, state){
+  const name=guessName(turns,pct);
+  const entry={name,pct,state,turns:[...turns],result:lastResult};
+  sessions.unshift(entry); if(sessions.length>8) sessions.pop();
+  renderSessions();
+}
+function guessName(turns,pct){
+  const txt=turns.map(t=>t.text).join(" ").toLowerCase();
+  if(/otp|bank\s*security/.test(txt)) return "Bank OTP Scam";
+  if(/lucky\s*draw|won.*prize|prize.*lakh/.test(txt)) return "Lottery Scam";
+  if(/kyc|aadhaar.*pan/.test(txt)) return "KYC Scam";
+  if(/microsoft|remote\s*access|anydesk/.test(txt)) return "Tech Support Scam";
+  if(/love|feeling\s*lonely|falling\s*for/.test(txt)) return "Romance Scam";
+  if(/doctor|appointment|hospital/.test(txt)) return "Medical Appt";
+  if(/delivery|order|tracking/.test(txt)) return "Delivery Inquiry";
+  return `Analysis (${pct}%)`;
+}
+function renderSessions(){
+  const list=document.getElementById("sessionList"); list.innerHTML="";
+  if(!sessions.length){ list.innerHTML='<div class="session-empty">No analyses yet</div>'; return; }
+  sessions.forEach((s,i)=>{
+    const col=s.pct<20?"var(--safe)":s.pct<35?"var(--warn)":"var(--crit)";
+    const div=document.createElement("div"); div.className="session-item";
+    div.innerHTML=`<span class="session-name">${s.name}</span><span class="session-risk" style="color:${col}">${s.pct}%</span>`;
+    div.onclick=()=>restoreSession(i);
+    list.appendChild(div);
+  });
+}
+function restoreSession(i){
+  const s=sessions[i];
+  document.getElementById("convo").value=s.turns.map(t=>`${t.speaker}: ${t.text}`).join("\n");
+  if(s.result && s.turns){ render(s.result,Math.round(s.result.risk_score*100),s.pct,[],s.turns); toast(`Restored: ${s.name}`); }
+  // Update comparison B
+  const rB=document.getElementById("cmpRiskB"); const mB=document.getElementById("cmpMetaB");
+  const col=s.pct<20?"var(--safe)":s.pct<35?"var(--warn)":"var(--crit)";
+  rB.textContent=`${s.pct}%`; rB.style.color=col;
+  mB.textContent=`${riskLabel(s.pct/100)} · ${fmt(s.state)} · ${s.turns.length} turns`;
+  updateCmpDiff();
+}
+function updateCmpDiff(){
+  const a=parseInt(document.getElementById("cmpRiskA").textContent)||0;
+  const b=parseInt(document.getElementById("cmpRiskB").textContent)||0;
+  if(!a||!b) return;
+  const diff=a-b; const el=document.getElementById("cmpDiff"); el.style.display="block";
+  document.getElementById("cmpDiffVal").textContent=diff===0?"Equal":`${Math.abs(diff)}% ${diff>0?"higher":"lower"} than B`;
+}
+
+// ── Replay ────────────────────────────────────────────────────────────
+function toggleReplay(){ replayMode=!replayMode; const p=document.getElementById("replayPanel"); p.style.display=replayMode?"block":"none"; document.getElementById("replayBtn").classList.toggle("active",replayMode); }
+function startReplay(){
+  if(!lastTurns.length) return;
+  replayIdx=0;
+  const sl=document.getElementById("replaySlider"); sl.max=lastTurns.length-1; sl.value=0;
+  document.getElementById("replayPanel").style.display="block"; replayMode=true;
+  updateReplayDisplay(0);
+}
+function updateReplayDisplay(idx){
+  const n=lastTurns.length; if(n===0)return;
+  document.getElementById("replayCtr").textContent=`${idx+1} / ${n}`;
+  document.getElementById("replaySlider").value=idx;
+  const t=lastTurns[idx];
+  document.getElementById("rsdState").textContent=t.speaker.toUpperCase();
+  const frac=(idx+1)/n; const approxRisk=Math.round(Math.min(frac*lastFinalPct*1.2,99));
+  document.getElementById("rsdRisk").textContent=`${approxRisk}%`;
+  document.getElementById("rsdTrigger").textContent=t.text.slice(0,30)+(t.text.length>30?"…":"");
+  document.querySelectorAll(".msg-bubble").forEach((m,i)=>{ m.style.opacity=i<=idx?"1":"0.3"; m.classList.toggle("selected",i===idx); });
+  if(idx===n-1){ clearInterval(replayTimer); document.getElementById("playPauseBtn").textContent="▶"; }
+}
+function replayStep(d){ replayIdx=Math.max(0,Math.min(lastTurns.length-1,replayIdx+d)); updateReplayDisplay(replayIdx); }
+function replayGoto(v){ replayIdx=parseInt(v); updateReplayDisplay(replayIdx); }
+function togglePlay(){
+  const btn=document.getElementById("playPauseBtn");
+  if(replayTimer){ clearInterval(replayTimer); replayTimer=null; btn.textContent="▶"; return; }
+  btn.textContent="⏸";
+  replayTimer=setInterval(()=>{ replayIdx++; if(replayIdx>=lastTurns.length){ clearInterval(replayTimer);replayTimer=null;btn.textContent="▶";return; } updateReplayDisplay(replayIdx); },1200);
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────
+function switchMode(m){
+  document.querySelectorAll(".mode-tab").forEach((t,i)=>t.classList.toggle("active",i===(m==="raw"?0:m==="builder"?1:2)));
+  document.getElementById("rawInput").style.display=m==="raw"?"block":"none";
+  document.getElementById("msgBuilder").style.display=m==="builder"?"block":"none";
+  document.getElementById("screenshotTab").style.display=m==="screenshot"?"block":"none";
+  const ab=document.getElementById("analyzeBtn");
+  if(ab)ab.style.display=m==="screenshot"?"none":"flex";
+  if(m==="builder"&&document.getElementById("msgList").children.length===0)addMsgRow();
+}
+
+// Inline screenshot handlers
+const OCR_STEPS_INLINE=["Image validated","OCR processing","Conversation reconstruction","Ready"];
+function handleInlineDrop(e){e.preventDefault();const f=e.dataTransfer.files[0];if(f)processInlineFile(f);}
+function handleInlineFileSelect(e){const f=e.target.files[0];if(f)processInlineFile(f);}
+async function processInlineFile(file){
+  document.getElementById("inlineUploadZone").style.display="none";
+  document.getElementById("inlineOcrProgress").style.display="block";
+  document.getElementById("inlineOcrResult").style.display="none";
+  document.getElementById("inlineOcrError").style.display="none";
+  const steps=document.getElementById("inlineOcrSteps");
+  steps.innerHTML=OCR_STEPS_INLINE.map((s,i)=>"<div class='ocr-step' id='ios"+i+"'><span class='ocr-step-icon'>○</span> "+s+"</div>").join("");
+  const D=ms=>new Promise(r=>setTimeout(r,ms));
+  const act=async(i,d)=>{await D(d);const e=document.getElementById("ios"+i);if(!e)return;if(i>0){const p=document.getElementById("ios"+(i-1));if(p){p.className="ocr-step done";p.querySelector(".ocr-step-icon").textContent="✓";}}e.className="ocr-step active";e.querySelector(".ocr-step-icon").textContent="●";};
+  await act(0,200);await act(1,400);
+  const fd=new FormData();fd.append("file",file);
+  try{
+    const resp=await fetch("http://localhost:8000/extract-conversation",{method:"POST",body:fd});
+    if(!resp.ok){const err=await resp.json();throw new Error(err.detail||"OCR failed");}
+    const data=await resp.json();
+    await act(2,300);await act(3,300);
+    const last=document.getElementById("ios"+(OCR_STEPS_INLINE.length-1));
+    if(last){last.className="ocr-step done";last.querySelector(".ocr-step-icon").textContent="✓";}
+    document.getElementById("inlineOcrResult").style.display="block";
+    document.getElementById("inlineOcrText").value=data.messages.map(m=>m.speaker+": "+m.text).join("");
+  }catch(e){
+    document.getElementById("inlineOcrError").style.display="block";
+    document.getElementById("inlineOcrErrMsg").textContent=e.message;
+  }
+}
+function useInlineOcr(){
+  const text=document.getElementById("inlineOcrText").value.trim();
+  if(!text)return;
+  document.getElementById("convo").value=text;
+  switchMode("raw");
+  setTimeout(analyze,100);
+}
+function resetInlineOcr(){
+  document.getElementById("inlineUploadZone").style.display="block";
+  document.getElementById("inlineOcrProgress").style.display="none";
+  document.getElementById("inlineOcrResult").style.display="none";
+  document.getElementById("inlineOcrError").style.display="none";
+  document.getElementById("screenshotFileInline").value="";
+}
+function addMsgRow(){
+  const list=document.getElementById("msgList");
+  const div=document.createElement("div"); div.className="msg-row";
+  div.innerHTML=`<select class="msg-speaker-sel"><option>caller</option><option>victim</option><option>attacker</option><option>user</option><option>bank</option><option>stranger</option></select><input class="msg-text-in" type="text" placeholder="Enter message…"/><button class="msg-del" onclick="this.parentElement.remove()">✕</button>`;
+  list.appendChild(div);
+}
+function toggleCompare(){ compareMode=!compareMode; document.getElementById("compareSection").style.display=compareMode?"block":"none"; }
+function toggleInvestMode(){ document.body.classList.toggle("invest-mode"); document.getElementById("investModeBtn").classList.toggle("active"); }
+function pipeClick(stage){ toast(`Pipeline stage: ${stage.toUpperCase()}`); }
+function confirmAction(type){
+  const msgs={block:"Block this conversation?",scam:"Mark as confirmed scam?"}; if(confirm(msgs[type]||"Confirm action?")) toast(`Action: ${type.toUpperCase()} — recorded in session`,"warn");
+}
+function toast(msg,type="safe"){
+  const c=document.getElementById("toast"); const d=document.createElement("div"); d.className="toast-item";
+  const col=type==="danger"?"#fca5a5":type==="warn"?"#fde68a":"#86efac";
+  d.innerHTML=`<span style="color:${col}">●</span> ${msg}`; c.appendChild(d);
+  setTimeout(()=>d.remove(),3500);
+}
+</script>
+
+<!-- FLOATING ADVISOR ORB -->
+<div id="advisorOrb" onclick="openAdvisor()" title="ATBG Security Advisor"
+  style="position:fixed;bottom:32px;left:32px;z-index:500;width:56px;height:56px;
+    border-radius:50%;background:linear-gradient(135deg,#0ea5e9,#38bdf8);
+    box-shadow:0 0 0 0 rgba(56,189,248,.5);
+    display:flex;align-items:center;justify-content:center;
+    font-size:22px;cursor:pointer;
+    animation:orb-pulse 2.5s infinite;">🛡</div>
+<style>
+@keyframes orb-pulse{0%{box-shadow:0 0 0 0 rgba(56,189,248,.5)}70%{box-shadow:0 0 0 14px rgba(56,189,248,0)}100%{box-shadow:0 0 0 0 rgba(56,189,248,0)}}
+#advisorOrb:hover{transform:scale(1.12);box-shadow:0 0 24px rgba(56,189,248,.5)}
+#advisorOrb.has-result{animation:orb-pulse 1.2s infinite;background:linear-gradient(135deg,#ef4444,#f97316)}
+</style>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- SECURITY ADVISOR PANEL                                             -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div id="advisorPanel" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(5,7,12,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+  <div style="background:rgba(13,16,23,.95);border:1px solid rgba(56,189,248,.2);border-radius:16px;width:min(680px,96vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 0 60px rgba(56,189,248,.08);overflow:hidden">
+    <!-- Header -->
+    <div style="padding:18px 22px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px;flex-shrink:0">
+      <div style="width:32px;height:32px;background:linear-gradient(135deg,rgba(56,189,248,.2),rgba(14,165,233,.1));border:1px solid rgba(56,189,248,.3);border-radius:8px;display:grid;place-items:center;font-size:14px">🛡</div>
+      <div>
+        <div style="font-size:12px;font-weight:700;letter-spacing:.1em;color:var(--text)">ATBG SECURITY ADVISOR</div>
+        <div style="font-size:10px;color:var(--text3);font-family:var(--mono)">Grounded in your behavioural analysis</div>
+      </div>
+      <button onclick="closeAdvisor()" style="margin-left:auto;background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:4px;transition:color .2s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'">✕</button>
+    </div>
+
+    <!-- Context card -->
+    <div id="advisorContext" style="margin:14px 18px;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:14px;flex-shrink:0">
+      <div style="font-size:9px;font-family:var(--mono);letter-spacing:.18em;color:var(--text3);margin-bottom:10px">CURRENT ANALYSIS CONTEXT</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px">
+        <div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px">Risk</div><div id="adv-risk" style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--text)">—</div></div>
+        <div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px">Current State</div><div id="adv-state" style="font-size:12px;font-weight:600;font-family:var(--mono);color:var(--cyan)">—</div></div>
+        <div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px">Next Predicted</div><div id="adv-next" style="font-size:12px;font-weight:600;font-family:var(--mono);color:var(--warn)">—</div></div>
+      </div>
+      <div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Trajectory</div><div id="adv-traj" style="font-size:11px;font-family:var(--mono);color:var(--text2)">—</div></div>
+    </div>
+
+    <!-- Suggested questions -->
+    <div style="padding:0 18px 12px;flex-shrink:0">
+      <div style="font-size:9px;font-family:var(--mono);letter-spacing:.15em;color:var(--text3);margin-bottom:8px">SUGGESTED QUESTIONS</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <button class="adv-chip" onclick="askAdvisor('Why is this risky?')">Why is this risky?</button>
+        <button class="adv-chip" onclick="askAdvisor('What should I do?')">What should I do?</button>
+        <button class="adv-chip" onclick="askAdvisor('Explain the behaviour')">Explain the behaviour</button>
+        <button class="adv-chip" onclick="askAdvisor('What happens next?')">What happens next?</button>
+        <button class="adv-chip" onclick="askAdvisor('What information should I avoid sharing?')">What to avoid sharing?</button>
+        <button class="adv-chip" onclick="askAdvisor('Should I block this person?')">Should I block?</button>
+      </div>
+    </div>
+
+    <!-- Chat messages -->
+    <div id="advisorMessages" style="flex:1;overflow-y:auto;padding:0 18px 12px;display:flex;flex-direction:column;gap:10px;min-height:0">
+      <div style="font-size:12px;color:var(--text3);text-align:center;padding:16px 0">Run an analysis first, then ask the advisor about the results.</div>
+    </div>
+
+    <!-- Typing indicator -->
+    <div id="advisorTyping" style="display:none;padding:0 18px 8px;flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:28px;height:28px;background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.2);border-radius:6px;display:grid;place-items:center;font-size:11px">🛡</div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <div class="typing-dot"></div><div class="typing-dot" style="animation-delay:.2s"></div><div class="typing-dot" style="animation-delay:.4s"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input -->
+    <div style="padding:12px 18px;border-top:1px solid rgba(255,255,255,.06);display:flex;gap:8px;flex-shrink:0">
+      <input id="advisorInput" type="text" placeholder="Ask ATBG about this conversation..." onkeydown="if(event.key==='Enter')sendAdvisor()" style="flex:1;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:var(--text);font-size:12px;padding:10px 14px;font-family:var(--font);outline:none;transition:border-color .2s" onfocus="this.style.borderColor='rgba(56,189,248,.4)'" onblur="this.style.borderColor='rgba(255,255,255,.08)'"/>
+      <button onclick="sendAdvisor()" style="background:var(--cyan);color:#050810;border:none;border-radius:8px;padding:10px 16px;font-size:11px;font-family:var(--mono);font-weight:700;cursor:pointer;letter-spacing:.06em;transition:opacity .2s" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">SEND</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- SCREENSHOT ANALYSIS PANEL                                          -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div id="screenshotPanel" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(5,7,12,.75);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+  <div style="background:rgba(13,16,23,.95);border:1px solid rgba(129,140,248,.2);border-radius:16px;width:min(700px,96vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 0 60px rgba(129,140,248,.06);overflow:hidden">
+    <!-- Header -->
+    <div style="padding:18px 22px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px;flex-shrink:0">
+      <div style="width:32px;height:32px;background:linear-gradient(135deg,rgba(129,140,248,.2),rgba(99,102,241,.1));border:1px solid rgba(129,140,248,.3);border-radius:8px;display:grid;place-items:center;font-size:14px">📷</div>
+      <div>
+        <div style="font-size:12px;font-weight:700;letter-spacing:.1em;color:var(--text)">ANALYZE CONVERSATION SCREENSHOT</div>
+        <div style="font-size:10px;color:var(--text3);font-family:var(--mono)">Upload a screenshot — ATBG will reconstruct and analyze its behavioural trajectory</div>
+      </div>
+      <button onclick="closeScreenshot()" style="margin-left:auto;background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:4px;transition:color .2s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'">✕</button>
+    </div>
+
+    <div style="flex:1;overflow-y:auto;padding:18px">
+
+      <!-- Upload zone -->
+      <div id="uploadZone" ondragover="event.preventDefault();this.style.borderColor='rgba(129,140,248,.6)'" ondragleave="this.style.borderColor='rgba(129,140,248,.2)'" ondrop="handleDrop(event)">
+        <input type="file" id="screenshotFile" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none" onchange="handleFileSelect(event)"/>
+        <div onclick="document.getElementById('screenshotFile').click()" style="border:2px dashed rgba(129,140,248,.2);border-radius:12px;padding:48px 24px;text-align:center;cursor:pointer;transition:all .3s;background:rgba(129,140,248,.03)" onmouseover="this.style.borderColor='rgba(129,140,248,.4)';this.style.background='rgba(129,140,248,.06)'" onmouseout="this.style.borderColor='rgba(129,140,248,.2)';this.style.background='rgba(129,140,248,.03)'">
+          <div style="font-size:36px;margin-bottom:14px">📷</div>
+          <div style="font-size:13px;font-weight:600;letter-spacing:.08em;color:var(--text);margin-bottom:6px">DROP SCREENSHOT HERE</div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:12px">or click to browse</div>
+          <div style="font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.1em">JPG • PNG • WEBP • MAX 10MB</div>
+        </div>
+      </div>
+
+      <!-- Progress steps -->
+      <div id="ocrProgress" style="display:none;margin-top:16px">
+        <div style="font-size:10px;font-family:var(--mono);letter-spacing:.2em;color:#a78bfa;margin-bottom:12px">IMAGE RECEIVED</div>
+        <div id="ocrSteps" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+
+      <!-- Extracted conversation -->
+      <div id="extractedConv" style="display:none;margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:10px;font-family:var(--mono);letter-spacing:.18em;color:#a78bfa">CONVERSATION RECONSTRUCTED</div>
+          <div id="ocrConfidence" style="font-size:10px;font-family:var(--mono);color:var(--text3)"></div>
+        </div>
+        <div id="ocrWarnings" style="margin-bottom:8px"></div>
+        <div id="extractedMsgs" style="background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:14px;max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
+        <!-- Editable textarea -->
+        <div style="font-size:10px;font-family:var(--mono);letter-spacing:.12em;color:var(--text3);margin-bottom:6px">EDIT IF NEEDED — one turn per line (speaker: message)</div>
+        <textarea id="ocrEditArea" style="width:100%;height:140px;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:12px;resize:vertical;outline:none" onfocus="this.style.borderColor='rgba(129,140,248,.4)'" onblur="this.style.borderColor='rgba(255,255,255,.08)'"></textarea>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button onclick="analyzeOcrResult()" style="background:linear-gradient(135deg,rgba(129,140,248,.2),rgba(99,102,241,.1));border:1px solid rgba(129,140,248,.5);border-radius:8px;padding:10px 20px;color:#a78bfa;font-size:11px;font-family:var(--mono);font-weight:700;letter-spacing:.1em;cursor:pointer;transition:all .3s;flex:1" onmouseover="this.style.background='rgba(129,140,248,.25)'" onmouseout="this.style.background='linear-gradient(135deg,rgba(129,140,248,.2),rgba(99,102,241,.1))'">▶ ANALYZE WITH ATBG</button>
+          <button onclick="resetScreenshot()" style="background:transparent;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:10px 16px;color:var(--text3);font-size:11px;font-family:var(--mono);cursor:pointer;transition:all .2s" onmouseover="this.style.borderColor='rgba(255,255,255,.25)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">↺ NEW</button>
+        </div>
+      </div>
+
+      <!-- OCR error -->
+      <div id="ocrError" style="display:none;margin-top:16px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:14px">
+        <div style="font-size:11px;font-weight:700;color:#fca5a5;margin-bottom:4px">⚠ EXTRACTION FAILED</div>
+        <div id="ocrErrorMsg" style="font-size:12px;color:var(--text2)"></div>
+        <button onclick="resetScreenshot()" style="margin-top:10px;background:transparent;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:7px 14px;color:#fca5a5;font-size:11px;font-family:var(--mono);cursor:pointer">TRY AGAIN</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<style>
+.adv-chip{background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.15);border-radius:6px;padding:5px 12px;color:var(--text2);font-size:11px;font-family:var(--mono);cursor:pointer;transition:all .2s;letter-spacing:.04em;}
+.adv-chip:hover{background:rgba(56,189,248,.12);border-color:rgba(56,189,248,.35);color:var(--cyan);}
+.adv-msg{padding:12px 14px;border-radius:10px;font-size:12px;line-height:1.6;animation:msg-in .3s ease;}
+@keyframes msg-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.adv-msg.user{background:rgba(56,189,248,.07);border:1px solid rgba(56,189,248,.12);margin-left:40px;color:var(--text);}
+.adv-msg.advisor{background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.06);border-left:2px solid rgba(56,189,248,.4);color:var(--text2);}
+.typing-dot{width:5px;height:5px;border-radius:50%;background:var(--cyan);animation:tdot 1.2s infinite;}
+@keyframes tdot{0%,100%{opacity:.2;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+.ocr-step{display:flex;align-items:center;gap:10px;font-size:12px;font-family:var(--mono);color:var(--text3);}
+.ocr-step.done{color:var(--safe);}
+.ocr-step.active{color:var(--cyan);}
+.ocr-step-icon{width:16px;text-align:center;flex-shrink:0;}
+</style>
+
+<script>
+// ══ ADVISOR STATE ══
+let advisorAnalysis = null;
+
+function openAdvisor() {
+  document.getElementById('advisorPanel').style.display='flex';
+  if (advisorAnalysis) updateAdvisorContext(advisorAnalysis);
+  else document.getElementById('advisorMessages').innerHTML='<div style="font-size:12px;color:var(--text3);text-align:center;padding:16px 0">Run a conversation analysis first, then ask the advisor about the results.</div>';
+}
+function closeAdvisor() { document.getElementById('advisorPanel').style.display='none'; }
+
+function updateAdvisorContext(result) {
+  advisorAnalysis = result;
+  const pct = Math.round((result.risk_score||0)*100);
+  const col = pct<20?'var(--safe)':pct<35?'var(--warn)':pct<60?'var(--danger)':'var(--crit)';
+  document.getElementById('adv-risk').textContent = pct+'%';
+  document.getElementById('adv-risk').style.color = col;
+  document.getElementById('adv-state').textContent = (result.current_state||'—').replace(/_/g,' ');
+  document.getElementById('adv-next').textContent = (result.next_state_pred||'—').replace(/_/g,' ');
+  // Parse trajectory from explanation
+  const raw = result.explanation?.trajectory||'';
+  const m = raw.match(/trajectory:([\s\S]+?)\.(\s|$)/i);
+  const traj = m ? m[1].trim() : (result.current_state||'—');
+  document.getElementById('adv-traj').textContent = traj.replace(/→/g,'→');
+}
+
+function askAdvisor(q) {
+  document.getElementById('advisorInput').value = q;
+  sendAdvisor();
+}
+
+async function sendAdvisor() {
+  const input = document.getElementById('advisorInput');
+  const q = input.value.trim();
+  if (!q) return;
+  if (!advisorAnalysis) {
+    appendAdvisorMsg('advisor', '⚠ Please run a conversation analysis first.');
+    return;
+  }
+  input.value = '';
+  appendAdvisorMsg('user', q);
+  showTyping(true);
+
+  const raw = advisorAnalysis.explanation?.trajectory||'';
+  const m = raw.match(/trajectory:([\s\S]+?)\.(\s|$)/i);
+  const trajStates = m ? m[1].split('→').map(s=>s.trim().toLowerCase()).filter(Boolean) : [];
+
+  try {
+    const resp = await fetch('http://localhost:8000/advisor', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        question: q,
+        risk_score: advisorAnalysis.risk_score||0,
+        current_state: advisorAnalysis.current_state||'benign',
+        next_state: advisorAnalysis.next_state_pred||'benign',
+        next_state_probability: advisorAnalysis.next_state_prob||0,
+        trajectory: trajStates,
+        conversation: '',
+        indicators: (advisorAnalysis.artifacts||[]).map(a=>a.artifact_type+': '+a.value),
+      })
+    });
+    if (!resp.ok) throw new Error('API error '+resp.status);
+    const d = await resp.json();
+    showTyping(false);
+    appendAdvisorMsg('advisor', formatAdvisorAnswer(d.answer, d.recommended_actions));
+  } catch(e) {
+    showTyping(false);
+    appendAdvisorMsg('advisor', '⚠ Unable to reach the ATBG advisor. Make sure the API is running.');
+  }
+}
+
+function formatAdvisorAnswer(answer, actions) {
+  let html = answer.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
+  if (actions && actions.length) {
+    html += '<div style="margin-top:10px;padding:10px;background:rgba(34,197,94,.05);border:1px solid rgba(34,197,94,.15);border-radius:7px"><div style="font-size:9px;font-family:var(--mono);letter-spacing:.15em;color:var(--safe);margin-bottom:6px">RECOMMENDED ACTIONS</div>';
+    actions.forEach(a => { html += `<div style="font-size:11px;color:var(--text2);margin-bottom:3px">✓ ${a}</div>`; });
+    html += '</div>';
+  }
+  return html;
+}
+
+function appendAdvisorMsg(type, html) {
+  const msgs = document.getElementById('advisorMessages');
+  const div = document.createElement('div');
+  div.className = 'adv-msg '+type;
+  div.innerHTML = html;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function showTyping(show) {
+  document.getElementById('advisorTyping').style.display = show?'block':'none';
+}
+
+// ══ SCREENSHOT STATE ══
+let ocrMessages = [];
+
+function openScreenshot() { document.getElementById('screenshotPanel').style.display='flex'; }
+function closeScreenshot() { document.getElementById('screenshotPanel').style.display='none'; }
+
+function handleDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) processFile(file);
+}
+
+const OCR_STEPS = ['Image validated','OCR processing','Conversation reconstruction','Behaviour analysis','Temporal graph generation'];
+
+async function processFile(file) {
+  document.getElementById('uploadZone').style.display='none';
+  document.getElementById('ocrProgress').style.display='block';
+  document.getElementById('extractedConv').style.display='none';
+  document.getElementById('ocrError').style.display='none';
+
+  const stepsEl = document.getElementById('ocrSteps');
+  stepsEl.innerHTML = OCR_STEPS.map((s,i)=>`<div class="ocr-step" id="ocrs${i}"><span class="ocr-step-icon">○</span>${s}</div>`).join('');
+
+  // Animate step 1
+  await activateStep(0, 400);
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    await activateStep(1, 500);
+    const resp = await fetch('http://localhost:8000/extract-conversation', { method:'POST', body:formData });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || 'OCR failed');
+    }
+
+    const data = await resp.json();
+    await activateStep(2, 400);
+    await activateStep(3, 400);
+    await activateStep(4, 400);
+
+    ocrMessages = data.messages;
+    showExtractedConv(data);
+  } catch(e) {
+    document.getElementById('ocrError').style.display='block';
+    document.getElementById('ocrErrorMsg').textContent = e.message || 'Unable to extract conversation. Please upload a clearer screenshot.';
+  }
+}
+
+function activateStep(i, delay) {
+  return new Promise(r => {
+    setTimeout(() => {
+      const el = document.getElementById('ocrs'+i);
+      if (!el) return r();
+      if (i>0) { const prev=document.getElementById('ocrs'+(i-1)); if(prev){prev.className='ocr-step done';prev.querySelector('.ocr-step-icon').textContent='✓';} }
+      el.className='ocr-step active'; el.querySelector('.ocr-step-icon').textContent='●';
+      r();
+    }, delay);
+  });
+}
+
+function showExtractedConv(data) {
+  // Mark last step done
+  const last = document.getElementById('ocrs'+(OCR_STEPS.length-1));
+  if (last) { last.className='ocr-step done'; last.querySelector('.ocr-step-icon').textContent='✓'; }
+
+  document.getElementById('extractedConv').style.display='block';
+  document.getElementById('ocrConfidence').textContent = `OCR confidence: ${Math.round(data.confidence*100)}%`;
+
+  // Warnings
+  const warnEl = document.getElementById('ocrWarnings');
+  warnEl.innerHTML = (data.warnings||[]).map(w=>`<div style="font-size:11px;color:var(--warn);background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:6px;padding:7px 10px;margin-bottom:6px">⚠ ${w}</div>`).join('');
+
+  // Message bubbles
+  const msgsEl = document.getElementById('extractedMsgs');
+  msgsEl.innerHTML = '';
+  data.messages.forEach(m => {
+    const isAtk = m.speaker === 'attacker';
+    const div = document.createElement('div');
+    div.style.cssText = `padding:9px 12px;border-radius:8px;max-width:85%;font-size:12px;line-height:1.5;${isAtk?'background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.14);border-left:2px solid rgba(239,68,68,.4);margin-right:auto':'background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.1);border-right:2px solid rgba(56,189,248,.3);margin-left:auto'}`;
+    div.innerHTML = `<div style="font-size:9px;font-family:var(--mono);font-weight:700;letter-spacing:.1em;margin-bottom:4px;color:${isAtk?'#fca5a5':'var(--cyan)'}">${m.speaker.toUpperCase()}</div>${m.text}`;
+    msgsEl.appendChild(div);
+  });
+
+  // Populate editable area
+  document.getElementById('ocrEditArea').value = data.messages.map(m=>`${m.speaker}: ${m.text}`).join('\n');
+}
+
+async function analyzeOcrResult() {
+  const raw = document.getElementById('ocrEditArea').value;
+  const turns = raw.split('\n').map((l,i)=>{
+    const idx=l.indexOf(':');
+    return {turn_index:i+1, speaker:idx>-1?l.slice(0,idx).trim():'unknown', text:idx>-1?l.slice(idx+1).trim():l, timestamp:null};
+  }).filter(t=>t.text);
+
+  // Populate the main conversation input and trigger analysis
+  document.getElementById('convo').value = raw;
+  closeScreenshot();
+
+  // Trigger analysis via the existing analyze() function
+  if (typeof analyze === 'function') {
+    setTimeout(analyze, 100);
+  }
+}
+
+function resetScreenshot() {
+  document.getElementById('uploadZone').style.display='block';
+  document.getElementById('ocrProgress').style.display='none';
+  document.getElementById('extractedConv').style.display='none';
+  document.getElementById('ocrError').style.display='none';
+  document.getElementById('screenshotFile').value='';
+  ocrMessages=[];
+}
+
+// ══ HOOK INTO EXISTING analyze() RESULT ══
+// Intercept render() to also update advisor context
+const _origRender = typeof render === 'function' ? render : null;
+if (_origRender) {
+  window.render = function(d, modelPct, finalPct, matched, turns) {
+    _origRender(d, modelPct, finalPct, matched, turns);
+    updateAdvisorContext(d);
+    // Show advisor FAB pulsing after analysis
+    const orb = document.getElementById('advisorOrb');
+    if (orb) { orb.classList.add('has-result'); setTimeout(()=>orb.classList.remove('has-result'),5000); }
+  };
+}
+</script>
+</body>
+</html>
